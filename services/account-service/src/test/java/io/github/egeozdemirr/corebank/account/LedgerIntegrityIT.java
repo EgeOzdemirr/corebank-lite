@@ -86,6 +86,18 @@ class LedgerIntegrityIT {
     }
 
     @Test
+    void ledger_cannotBeTruncated() {
+        assertThatThrownBy(() -> jdbcClient.sql("TRUNCATE ledger_entry").update())
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
+    }
+
+    @Test
+    void ledger_cannotBeTruncatedThroughCascadeFromAccount() {
+        assertThatThrownBy(() -> jdbcClient.sql("TRUNCATE account CASCADE").update())
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
+    }
+
+    @Test
     void customerAccount_cannotHaveNegativeBalanceEvenViaSql() {
         assertThatThrownBy(() -> jdbcClient.sql("""
                         INSERT INTO account (id, iban, account_type, customer_id, holder_name, holder_tckn, currency,
