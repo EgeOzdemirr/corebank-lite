@@ -79,6 +79,7 @@ _A demo GIF will be added in week 6._
 ## Technical decisions
 
 - [ADR-0001: Event contracts are designed for the transaction monitoring component](docs/adr/0001-event-contracts-designed-for-transaction-monitoring.md)
+- [ADR-0002: Ledger immutability is enforced in the database as well as in the application](docs/adr/0002-ledger-immutability-enforced-in-database.md)
 
 Further decisions in code, each enforced by a test:
 
@@ -86,7 +87,7 @@ Further decisions in code, each enforced by a test:
   build (Checkstyle).
 - **Double-entry ledger:** every posting has at least two lines that sum to zero. The domain rejects unbalanced
   postings, and a deferred PostgreSQL constraint trigger rejects them at commit even if application code is bypassed.
-  Ledger rows are append-only (UPDATE and DELETE are rejected by a trigger).
+  Ledger rows are append-only: UPDATE, DELETE and TRUNCATE are rejected by triggers (ADR-0002).
 - **Balance** is a materialised field guarded by JPA optimistic locking (`@Version`); a lost update becomes HTTP 409.
 - **Negative balances** depend on the account type: customer accounts cannot go below zero, the bank's funding
   accounts (the contra side of opening deposits) can.
@@ -115,7 +116,7 @@ Current numbers (week 1):
 | Module | Tests | Line coverage | Branch coverage |
 | --- | --- | --- | --- |
 | contracts | 19 | 100% | n/a |
-| account-service | 151 unit + 13 integration | 99.8% | 94.6% |
+| account-service | 151 unit + 15 integration | 99.8% | 94.6% |
 
 Performance measurements (k6, p95 latency) will be added in week 6.
 

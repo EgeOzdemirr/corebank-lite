@@ -18,3 +18,13 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   the root cause. **Caught by:** `LedgerIntegrityIT`.
 - **Quality gates that pushed back:** SpotBugs flagged a response record exposing a mutable list (now copied
   defensively); PMD flagged a field that could be final (`Account.status`).
+
+## Week 2: transfer-service, state machine, Redis idempotency, limits
+
+- **Given:** the private project guide (week 2 scope), the PR split and file plans approved by the owner, and the
+  owner's decisions on gRPC, hot-account locking, unknown posting outcomes (HTTP 202, transfer stays `APPROVED`),
+  idempotency key release, daily limit scope and ports.
+- **Wrong (week 1 code):** the append-only guard on `ledger_entry` was a row-level `UPDATE`/`DELETE` trigger only, so
+  `TRUNCATE ledger_entry` (and `TRUNCATE account CASCADE`) emptied the ledger. **Caught by:** reviewing the triggers
+  while writing ADR-0002; two new `LedgerIntegrityIT` tests failed against the old schema and pass with the V3
+  statement-level `BEFORE TRUNCATE` trigger.
