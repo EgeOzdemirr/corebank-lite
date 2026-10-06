@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/common/transfer-details.v1.json",
+  "title": "TransferDetails v1",
+  "description": "Fields shared by every transfer event. They carry what the aml-monitor rules need: both accounts, the beneficiary name for sanctions screening, the amount, the channel and the maker/checker pair for segregation-of-duties checks.",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.common.TransferDetailsV1",
+  "type": "object",
+  "properties": {
+    "transferId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "sourceAccountId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Debited account. Also the Kafka partition key, so a source account's transfers arrive in order."
+    },
+    "sourceIban": {
+      "type": "string",
+      "pattern": "^TR[0-9]{24}$"
+    },
+    "targetAccountId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Credited account."
+    },
+    "targetIban": {
+      "type": "string",
+      "pattern": "^TR[0-9]{24}$"
+    },
+    "beneficiaryName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Recipient name as entered by the maker; screened against sanctions lists."
+    },
+    "amount": {
+      "$ref": "monetary-amount.v1.json"
+    },
+    "channel": {
+      "type": "string",
+      "enum": [
+        "BRANCH",
+        "INTERNET_BANKING",
+        "MOBILE",
+        "OPEN_BANKING",
+        "API"
+      ],
+      "description": "Channel through which the transfer was initiated. Monitoring rules use it to apply channel-specific thresholds."
+    },
+    "makerUserId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "User who created the transfer."
+    },
+    "checkerUserId": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "description": "User who approved the transfer. Null when the amount was below the approval threshold: such transfers are approved automatically and have no checker. When not null it is always different from makerUserId."
+    }
+  },
+  "required": [
+    "transferId",
+    "sourceAccountId",
+    "sourceIban",
+    "targetAccountId",
+    "targetIban",
+    "beneficiaryName",
+    "amount",
+    "channel",
+    "makerUserId",
+    "checkerUserId"
+  ]
+}

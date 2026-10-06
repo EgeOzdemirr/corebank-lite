@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter
+        xmlns="https://github.com/spotbugs/filter/3.0.0"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/3.1.0/spotbugs/etc/findbugsfilter.xsd">
+
+    <!-- Event DTOs are generated from JSON Schema; the schema, not the generated code, is the reviewed artifact. -->
+    <Match>
+        <Package name="~io\.github\.egeozdemirr\.corebank\.contracts\.events(\..*)?"/>
+    </Match>
+
+    <!--
+        Application services receive their collaborators (ports, other services) through constructor injection.
+        Sharing those instances is the point of dependency injection, so EI_EXPOSE_REP2 does not apply to them.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+        <Class name="~io\.github\.egeozdemirr\.corebank\.[a-z]+\.application\.[A-Za-z]+Service"/>
+    </Match>
+</FindBugsFilter>

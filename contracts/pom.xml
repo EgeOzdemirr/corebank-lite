@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.egeozdemirr</groupId>
+        <artifactId>corebank-lite</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>contracts</artifactId>
+    <name>contracts</name>
+    <description>
+        Versioned event schemas (JSON Schema) and the DTOs generated from them. The only code shared between
+        P1 services and the aml-monitor component; no domain code lives here.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jsonschema2pojo</groupId>
+                <artifactId>jsonschema2pojo-maven-plugin</artifactId>
+                <configuration>
+                    <sourceDirectory>${project.basedir}/src/main/resources/schemas</sourceDirectory>
+                    <targetPackage>io.github.egeozdemirr.corebank.contracts.events</targetPackage>
+                    <annotationStyle>jackson2</annotationStyle>
+                    <!-- Nullable-but-required fields (e.g. checkerUserId) must be written as explicit nulls. -->
+                    <inclusionLevel>ALWAYS</inclusionLevel>
+                    <dateTimeType>java.time.Instant</dateTimeType>
+                    <includeAdditionalProperties>false</includeAdditionalProperties>
+                    <includeGeneratedAnnotation>false</includeGeneratedAnnotation>
+                    <includeJsr303Annotations>false</includeJsr303Annotations>
+                    <includeConstructors>false</includeConstructors>
+                    <generateBuilders>true</generateBuilders>
+                    <includeHashcodeAndEquals>true</includeHashcodeAndEquals>
+                    <includeToString>true</includeToString>
+                    <removeOldOutput>true</removeOldOutput>
+                    <targetVersion>${java.version}</targetVersion>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <!-- Publishes ContractSchemaValidator so services can check their outbox payloads against the schemas. -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

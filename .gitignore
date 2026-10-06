@@ -1,0 +1,16 @@
+# Private project guide (never committed)
+docs/private/
+
+# Secrets
+.env
+
+# Build output
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# macOS
+.DS_Store

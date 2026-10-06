@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/common/event-envelope.v1.json",
+  "title": "EventEnvelope v1",
+  "description": "Common envelope carried by every corebank-lite event. P1 services and the aml-monitor component rely on these fields for deduplication, tracing and audit.",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.common.EventEnvelopeV1",
+  "type": "object",
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique id of this event. Consumers deduplicate on it (processed_events)."
+    },
+    "eventType": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Logical event name, for example AccountOpened."
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Major version of the event schema. Always equals the topic's version suffix."
+    },
+    "occurredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC instant at which the business fact happened."
+    },
+    "correlationId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Ties together every event caused by the same request."
+    },
+    "actorUserId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "User or system principal that triggered the event."
+    }
+  },
+  "required": ["eventId", "eventType", "schemaVersion", "occurredAt", "correlationId", "actorUserId"]
+}

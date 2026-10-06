@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+<suppressions>
+    <!-- Spring Boot entry points only hold a static main method by design. -->
+    <suppress checks="HideUtilityClassConstructor" files="[\\/][A-Za-z]+Application\.java$"/>
+
+    <!-- ArchUnit collects rules from static fields; the class is never instantiated as a utility. -->
+    <suppress checks="HideUtilityClassConstructor" files="[\\/]ArchitectureTest\.java$"/>
+
+    <!-- Test data (amounts, sizes, expected values) reads better inline than as named constants. -->
+    <suppress checks="MagicNumber" files="[\\/]src[\\/]test[\\/]"/>
+    <suppress checks="MethodLength" files="[\\/]src[\\/]test[\\/]"/>
+    <!-- Test method names follow the given_when_then underscore convention. -->
+    <suppress checks="MethodName" files="[\\/]src[\\/]test[\\/]"/>
+</suppressions>

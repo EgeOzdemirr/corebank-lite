@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/transfers/transfer-approved.v1.json",
+  "title": "TransferApproved v1",
+  "description": "Published to banking.transfers.approved.v1 when a transfer reaches APPROVED, either by a checker (above the threshold) or automatically (below it, checkerUserId is null). Partition key: payload.sourceAccountId.",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferApprovedV1",
+  "type": "object",
+  "extends": {
+    "$ref": "../common/event-envelope.v1.json"
+  },
+  "allOf": [
+    {
+      "$ref": "../common/event-envelope.v1.json"
+    },
+    {
+      "properties": {
+        "eventType": { "const": "TransferApproved" },
+        "schemaVersion": { "const": 1 }
+      }
+    }
+  ],
+  "properties": {
+    "payload": {
+      "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferApprovedPayloadV1",
+      "type": "object",
+      "extends": {
+        "$ref": "../common/transfer-details.v1.json"
+      },
+      "allOf": [
+        {
+          "$ref": "../common/transfer-details.v1.json"
+        }
+      ],
+      "properties": {
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["approvedAt"],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": ["payload"],
+  "unevaluatedProperties": false
+}

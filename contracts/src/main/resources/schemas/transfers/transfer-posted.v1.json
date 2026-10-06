@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/transfers/transfer-posted.v1.json",
+  "title": "TransferPosted v1",
+  "description": "Published to banking.transfers.posted.v1 when both ledger legs of a transfer are posted. Partition key: payload.sourceAccountId.",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferPostedV1",
+  "type": "object",
+  "extends": {
+    "$ref": "../common/event-envelope.v1.json"
+  },
+  "allOf": [
+    {
+      "$ref": "../common/event-envelope.v1.json"
+    },
+    {
+      "properties": {
+        "eventType": { "const": "TransferPosted" },
+        "schemaVersion": { "const": 1 }
+      }
+    }
+  ],
+  "properties": {
+    "payload": {
+      "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferPostedPayloadV1",
+      "type": "object",
+      "extends": {
+        "$ref": "../common/transfer-details.v1.json"
+      },
+      "allOf": [
+        {
+          "$ref": "../common/transfer-details.v1.json"
+        }
+      ],
+      "properties": {
+        "postingId": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Ledger posting that holds the debit and credit legs of this transfer."
+        },
+        "postedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["postingId", "postedAt"],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": ["payload"],
+  "unevaluatedProperties": false
+}

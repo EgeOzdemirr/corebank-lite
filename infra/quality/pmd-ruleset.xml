@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="corebank-lite"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+    <description>
+        corebank-lite PMD rules. Whole categories are enabled; the exclusions below are rules that conflict
+        with the project's conventions (records, constructor injection, Spring entry points), each with a reason.
+    </description>
+
+    <rule ref="category/java/bestpractices.xml">
+        <!-- SLF4J placeholders already defer formatting; the arguments logged are cheap accessors. -->
+        <exclude name="GuardLogStatement"/>
+        <!-- Ports are narrow by design (Interface Segregation), not lambdas; they may grow a second method. -->
+        <exclude name="ImplicitFunctionalInterface"/>
+    </rule>
+    <rule ref="category/java/errorprone.xml">
+        <!-- Classes use record-style accessors (eventType(), not getEventType()) to match Java records. -->
+        <exclude name="AvoidFieldNameMatchingMethodName"/>
+    </rule>
+
+    <rule ref="category/java/multithreading.xml"/>
+    <rule ref="category/java/performance.xml"/>
+    <rule ref="category/java/security.xml"/>
+
+    <rule ref="category/java/design.xml">
+        <!-- Method chains on value objects and records are intentional, not Demeter violations. -->
+        <exclude name="LawOfDemeter"/>
+        <!-- Records, DTOs and JPA entities are data holders by design. -->
+        <exclude name="DataClass"/>
+        <!-- Package coupling is governed by ArchUnit layer rules instead. -->
+        <exclude name="LoosePackageCoupling"/>
+        <exclude name="ExcessiveImports"/>
+        <!-- Re-configured below: record-style accessors (id(), balance()) count as methods. -->
+        <exclude name="TooManyMethods"/>
+    </rule>
+    <rule ref="category/java/design.xml/TooManyMethods">
+        <properties>
+            <property name="maxmethods" value="20"/>
+        </properties>
+    </rule>
+    <rule ref="category/java/design.xml/UseUtilityClass">
+        <properties>
+            <property name="violationSuppressXPath"
+                      value="//ClassDeclaration[pmd-java:hasAnnotation('org.springframework.boot.autoconfigure.SpringBootApplication')]"/>
+        </properties>
+    </rule>
+
+    <rule ref="category/java/codestyle.xml">
+        <!-- Style choices that conflict with the project's conventions. -->
+        <exclude name="AtLeastOneConstructor"/>
+        <exclude name="LocalVariableCouldBeFinal"/>
+        <exclude name="MethodArgumentCouldBeFinal"/>
+        <exclude name="OnlyOneReturn"/>
+        <exclude name="ShortVariable"/>
+        <exclude name="LongVariable"/>
+        <exclude name="ShortClassName"/>
+        <exclude name="CommentDefaultAccessModifier"/>
+        <exclude name="CallSuperInConstructor"/>
+        <exclude name="UseExplicitTypes"/>
+        <exclude name="TooManyStaticImports"/>
+        <!-- Re-configured below so that value-object idioms such as of() and id() are allowed. -->
+        <exclude name="ShortMethodName"/>
+    </rule>
+    <rule ref="category/java/codestyle.xml/ShortMethodName">
+        <properties>
+            <property name="minimum" value="2"/>
+        </properties>
+    </rule>
+</ruleset>

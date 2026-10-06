@@ -1,0 +1,139 @@
+# corebank-lite
+
+A bank must never lose or invent money. Every transfer has to be booked twice (debit and credit) and balance to
+zero, two concurrent requests must not overwrite each other's balance, every business change has to leave an auditable
+event behind, and a later compliance component has to be able to read those events without anyone rewriting the
+producers. **corebank-lite** is a small core banking system built around those guarantees: Spring Boot
+microservices with a double-entry ledger, optimistic locking, a transactional outbox and versioned event contracts
+designed from the first week for a transaction monitoring component that will live in the same repository.
+
+> **No personal data is processed.** All names, TCKNs and IBANs are synthetic. TCKNs and IBANs satisfy their check
+> digit algorithms but are generated at random, and IBANs use the unassigned bank code `99999`.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    client([Client]) -->|REST| gateway[gateway<br/><i>week 4</i>]
+    gateway --> account[account-service]
+    gateway --> transfer[transfer-service<br/><i>week 2</i>]
+    gateway --> customer[customer-service]
+    transfer -. gRPC .-> account
+
+    account --> accountDb[(PostgreSQL<br/>account, ledger_entry,<br/>outbox_event)]
+    accountDb -. outbox relay<br/><i>week 3</i> .-> kafka{{Kafka KRaft<br/>banking.*.v1 topics}}
+
+    kafka --> audit[audit-service<br/><i>week 3</i>]
+    kafka --> notification[notification-service<br/><i>week 3</i>]
+    kafka -. own consumer group .-> aml[services/aml-monitor<br/><i>reserved for P4</i>]
+    generator[tools/synthetic-generator<br/><i>reserved for P4</i>] -.-> aml
+
+    contracts[[contracts<br/>JSON Schema + DTOs]] -.- account
+    contracts -.- aml
+```
+
+| Module | State | Responsibility |
+| --- | --- | --- |
+| `contracts` | done | Versioned event schemas (JSON Schema) and generated DTOs; the only shared code |
+| `services/account-service` | done | Account opening, double-entry ledger, balances, transactional outbox |
+| `services/transfer-service` | skeleton | Transfers, state machine, limits, maker-checker, idempotency, saga |
+| `services/customer-service` | skeleton | Customers, KYC status, synthetic TCKN validation |
+| `services/gateway` | skeleton | Routing, JWT validation, rate limiting |
+| `services/audit-service` | skeleton | Append-only, hash-chained audit trail |
+| `services/notification-service` | skeleton | Simulated e-mail and SMS |
+| `services/aml-monitor` | reserved | Transaction monitoring and IT general controls (P4); added later, consumes `contracts` |
+| `tools/synthetic-generator` | reserved | Synthetic event generator so `aml-monitor` can run without P1 (P4) |
+
+## Run it
+
+Prerequisites: Docker, JDK 21.
+
+```bash
+cp .env.example .env              # then change the password
+docker compose up -d              # PostgreSQL 18, Kafka 4 (KRaft) and the versioned topics
+./mvnw -q install -DskipTests     # builds contracts and the services
+./mvnw -pl services/account-service spring-boot:run
+```
+
+- Swagger UI: <http://localhost:8081/swagger-ui.html>
+- Open an account with an opening deposit:
+
+```bash
+curl -s -X POST localhost:8081/api/v1/accounts \
+  -H 'Content-Type: application/json' -H 'X-Correlation-Id: demo-1' -H 'X-Actor-User-Id: demo-user' \
+  -d '{"customerId":"7d0f5a3e-4c1b-4a8e-9d2c-1f3e5b7a9c01","holderName":"Zeynep Arslan",
+       "holderTckn":"10000000146","currency":"TRY","openingDeposit":"2500.00"}'
+```
+
+Then `GET /api/v1/accounts/{id}/balance` and `GET /api/v1/accounts/{id}/ledger-entries`.
+
+Running the services themselves from `docker compose up` as well is planned for week 6, once each service has a
+non-root container image.
+
+## Demo
+
+_A demo GIF will be added in week 6._
+
+## Technical decisions
+
+- [ADR-0001: Event contracts are designed for the transaction monitoring component](docs/adr/0001-event-contracts-designed-for-transaction-monitoring.md)
+
+Further decisions in code, each enforced by a test:
+
+- **Money** is a value object: `BigDecimal`, scale 2, `HALF_EVEN`, always with a currency. `double`/`float` fail the
+  build (Checkstyle).
+- **Double-entry ledger:** every posting has at least two lines that sum to zero. The domain rejects unbalanced
+  postings, and a deferred PostgreSQL constraint trigger rejects them at commit even if application code is bypassed.
+  Ledger rows are append-only (UPDATE and DELETE are rejected by a trigger).
+- **Balance** is a materialised field guarded by JPA optimistic locking (`@Version`); a lost update becomes HTTP 409.
+- **Negative balances** depend on the account type: customer accounts cannot go below zero, the bank's funding
+  accounts (the contra side of opening deposits) can.
+- **Transactional outbox:** `AccountOpened` is written in the same transaction as the account. The relay to Kafka
+  comes in week 3.
+- **Layering** (`api -> application -> domain`, infrastructure behind ports) is enforced by ArchUnit.
+
+## Tests and quality
+
+`./mvnw verify` runs everything below. Any violation fails the build, locally and in CI.
+
+| Gate | Tool |
+| --- | --- |
+| Style, naming, no magic numbers, no floating point money | Checkstyle |
+| Code smells, copy-paste detection | PMD, CPD |
+| Bug patterns | SpotBugs |
+| Unit and slice tests | JUnit 5, AssertJ, Mockito, Spring `@WebMvcTest` |
+| Integration tests against real PostgreSQL | Testcontainers |
+| Layer rules | ArchUnit |
+| Event contract conformance | JSON Schema validation of the outbox payload |
+| Line coverage of at least 80% | JaCoCo |
+| Secrets | gitleaks (pre-commit hook and CI) |
+
+Current numbers (week 1):
+
+| Module | Tests | Line coverage | Branch coverage |
+| --- | --- | --- | --- |
+| contracts | 19 | 100% | n/a |
+| account-service | 151 unit + 13 integration | 99.8% | 94.6% |
+
+Performance measurements (k6, p95 latency) will be added in week 6.
+
+## Known limitations
+
+- Only account-service is implemented; the other services are skeletons.
+- Outbox rows are not yet relayed to Kafka (week 3).
+- No authentication yet: the acting user comes from the `X-Actor-User-Id` header until Keycloak and the gateway
+  arrive (week 4).
+- Every opening deposit updates the same funding account row, so concurrent openings in one currency may receive
+  HTTP 409 and need a retry. Locking strategies are compared in week 2.
+- Only PostgreSQL; the Oracle reporting profile comes later (the Oracle image needs extra care on Apple Silicon).
+
+---
+
+## Türkçe özet
+
+corebank-lite; hesap, havale ve çift taraflı defter servislerinden oluşan küçük bir çekirdek bankacılık sistemidir.
+Para `BigDecimal` (2 ondalık, HALF_EVEN) ile tutulur, her kayıt borç ve alacak olarak toplamı sıfır olacak şekilde
+deftere yazılır, bakiye iyimser kilitle korunur ve her iş değişikliği aynı veritabanı işleminde outbox tablosuna olay
+olarak düşer. Olay sözleşmeleri (`contracts`) sürümlüdür ve ileride aynı repoya `services/aml-monitor/` olarak
+eklenecek işlem izleme bileşeni düşünülerek tasarlanmıştır (ADR-0001). **Kişisel veri işlenmez;** tüm veriler
+sentetiktir.

@@ -1,0 +1,84 @@
+package io.github.egeozdemirr.corebank.account.domain.identity;
+
+import io.github.egeozdemirr.corebank.account.domain.exception.InvalidIbanException;
+import java.math.BigInteger;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.regex.Pattern;
+
+/**
+ * Turkish IBAN: {@code TR} + 2 check digits + 5-digit bank code + 1 reserved digit ({@code 0}) + 16-digit account
+ * number. Check digits follow ISO 13616 (mod 97).
+ *
+ * <p>{@link #toString()} is masked because IBANs are personal data under KVKK and must not appear in logs.
+ */
+public record Iban(String value) {
+
+    public static final int BANK_CODE_LENGTH = 5;
+    public static final int ACCOUNT_NUMBER_LENGTH = 16;
+
+    private static final String COUNTRY_CODE = "TR";
+    private static final String RESERVED_DIGIT = "0";
+    private static final String CHECK_DIGIT_PLACEHOLDER = "00";
+    private static final Pattern FORMAT = Pattern.compile("^TR\\d{24}$");
+    private static final Pattern BANK_CODE_FORMAT = Pattern.compile("^\\d{" + BANK_CODE_LENGTH + "}$");
+    private static final BigInteger CHECK_MODULUS = BigInteger.valueOf(97);
+    private static final int VALID_REMAINDER = 1;
+    private static final int CHECK_DIGIT_BASE = 98;
+    private static final int COUNTRY_AND_CHECK_DIGITS_LENGTH = 4;
+    private static final int VISIBLE_PREFIX_LENGTH = 4;
+    private static final int VISIBLE_SUFFIX_LENGTH = 4;
+    private static final String MASK = "*";
+
+    public Iban {
+        Objects.requireNonNull(value, "value");
+        if (!FORMAT.matcher(value).matches() || !hasValidCheckDigits(value)) {
+            throw new InvalidIbanException();
+        }
+    }
+
+    /** Accepts the printed form as well: spaces are removed and letters upper-cased. */
+    public static Iban parse(String printed) {
+        Objects.requireNonNull(printed, "printed");
+        return new Iban(printed.replace(" ", "").toUpperCase(Locale.ROOT));
+    }
+
+    /** Builds a valid IBAN by computing the check digits for the given bank code and account number. */
+    public static Iban forTurkishAccount(String bankCode, long accountNumber) {
+        Objects.requireNonNull(bankCode, "bankCode");
+        if (!BANK_CODE_FORMAT.matcher(bankCode).matches() || accountNumber < 0) {
+            throw new InvalidIbanException();
+        }
+        String paddedAccountNumber = String.format(Locale.ROOT, "%0" + ACCOUNT_NUMBER_LENGTH + "d", accountNumber);
+        String basicBankAccountNumber = bankCode + RESERVED_DIGIT + paddedAccountNumber;
+        int checkDigits = CHECK_DIGIT_BASE - remainder(basicBankAccountNumber + COUNTRY_CODE + CHECK_DIGIT_PLACEHOLDER);
+        return new Iban(COUNTRY_CODE + String.format(Locale.ROOT, "%02d", checkDigits) + basicBankAccountNumber);
+    }
+
+    public String masked() {
+        int hiddenLength = value.length() - VISIBLE_PREFIX_LENGTH - VISIBLE_SUFFIX_LENGTH;
+        return value.substring(0, VISIBLE_PREFIX_LENGTH)
+                + MASK.repeat(hiddenLength)
+                + value.substring(value.length() - VISIBLE_SUFFIX_LENGTH);
+    }
+
+    @Override
+    public String toString() {
+        return masked();
+    }
+
+    private static boolean hasValidCheckDigits(String candidate) {
+        String rearranged = candidate.substring(COUNTRY_AND_CHECK_DIGITS_LENGTH)
+                + candidate.substring(0, COUNTRY_AND_CHECK_DIGITS_LENGTH);
+        return remainder(rearranged) == VALID_REMAINDER;
+    }
+
+    /** ISO 13616: letters become two-digit numbers (A = 10 ... Z = 35), then the whole number is taken mod 97. */
+    private static int remainder(String alphanumeric) {
+        StringBuilder digits = new StringBuilder();
+        for (char character : alphanumeric.toCharArray()) {
+            digits.append(Character.getNumericValue(character));
+        }
+        return new BigInteger(digits.toString()).mod(CHECK_MODULUS).intValue();
+    }
+}

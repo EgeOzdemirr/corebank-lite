@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/accounts/account-opened.v1.json",
+  "title": "AccountOpened v1",
+  "description": "Published to banking.accounts.opened.v1 when an account is opened. Partition key: payload.accountId. The holder's TCKN is deliberately not part of the event (data minimisation, KVKK).",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.accounts.AccountOpenedV1",
+  "type": "object",
+  "extends": {
+    "$ref": "../common/event-envelope.v1.json"
+  },
+  "allOf": [
+    {
+      "$ref": "../common/event-envelope.v1.json"
+    },
+    {
+      "properties": {
+        "eventType": { "const": "AccountOpened" },
+        "schemaVersion": { "const": 1 }
+      }
+    }
+  ],
+  "properties": {
+    "payload": {
+      "javaType": "io.github.egeozdemirr.corebank.contracts.events.accounts.AccountOpenedPayloadV1",
+      "type": "object",
+      "properties": {
+        "accountId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "iban": {
+          "type": "string",
+          "pattern": "^TR[0-9]{24}$"
+        },
+        "customerId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "holderName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "openedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Account opening date. Monitoring rules use it to flag activity on newly opened accounts."
+        }
+      },
+      "required": ["accountId", "iban", "customerId", "holderName", "currency", "openedAt"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["payload"],
+  "unevaluatedProperties": false
+}

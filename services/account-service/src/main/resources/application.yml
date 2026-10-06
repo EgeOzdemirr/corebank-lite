@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: account-service
+  config:
+    # Local runs read secrets from the repository's .env (never committed); containers get real env variables.
+    import: "optional:file:.env[.properties],optional:file:../../.env[.properties]"
+  datasource:
+    url: ${ACCOUNT_DB_URL:jdbc:postgresql://localhost:5432/corebank_account}
+    username: ${ACCOUNT_DB_USERNAME}
+    password: ${ACCOUNT_DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        # Deterministic flush order (by primary key) keeps row-lock order stable across concurrent postings.
+        order_updates: true
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+
+server:
+  port: ${ACCOUNT_SERVICE_PORT:8081}
+
+corebank:
+  account:
+    iban:
+      synthetic-bank-code: ${COREBANK_SYNTHETIC_BANK_CODE:99999}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
