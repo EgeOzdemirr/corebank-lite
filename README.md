@@ -1,5 +1,7 @@
 # corebank-lite
 
+[![CI](https://github.com/EgeOzdemirr/corebank-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/EgeOzdemirr/corebank-lite/actions/workflows/ci.yml)
+
 A bank must never lose or invent money. Every transfer has to be booked twice (debit and credit) and balance to
 zero, two concurrent requests must not overwrite each other's balance, every business change has to leave an auditable
 event behind, and a later compliance component has to be able to read those events without anyone rewriting the
