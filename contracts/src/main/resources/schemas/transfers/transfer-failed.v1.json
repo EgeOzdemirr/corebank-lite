@@ -35,7 +35,7 @@
         "failureCode": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$",
-          "description": "Stable, machine-readable reason, for example INSUFFICIENT_FUNDS, ACCOUNT_NOT_ACTIVE, ACCOUNT_NOT_FOUND or CURRENCY_MISMATCH. Deliberately an open set rather than an enum, so a new reason is not a breaking change; consumers must treat unknown codes as a generic failure. There is no free-text reason, so no personal data can leak through this event."
+          "description": "Stable, machine-readable reason, for example INSUFFICIENT_FUNDS, ACCOUNT_NOT_ACTIVE, ACCOUNT_NOT_FOUND or CURRENCY_MISMATCH. Deliberately an open set rather than an enum, so a new reason is not a breaking change. Consumers must treat unknown codes as a generic failure. There is no free-text reason, so no personal data can leak through this event."
         },
         "failedAt": {
           "type": "string",
