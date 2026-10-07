@@ -172,7 +172,7 @@ Current numbers (week 2, in progress):
 | --- | --- | --- | --- |
 | contracts | 32 | 100% | n/a |
 | account-service | 190 unit + 34 integration | 99.6% | 93.8% |
-| transfer-service | 230 unit + 48 integration | 99.8% | 92.0% |
+| transfer-service | 232 unit + 50 integration | 99.8% | 92.0% |
 
 Performance measurements (k6, p95 latency) will be added in week 6.
 

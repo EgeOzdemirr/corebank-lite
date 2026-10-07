@@ -9,7 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Posts an APPROVED transfer and records what definitely happened. The call runs outside any transaction. An
+ * Posts an APPROVED transfer and records what definitely happened. Log lines carry identifiers and codes only (the
+ * posting id is the transfer id, ADR-0004), never IBANs or names. The call runs outside any transaction. An
  * unknown outcome changes nothing: the transfer stays APPROVED with its limit reserved and is recovered later with the
  * same posting id (roadmap week 3). A posting id conflict is a bug: it is flagged for review and never retried.
  */
@@ -37,12 +38,14 @@ public class TransferPostingStep {
             case PostingOutcome.Posted posted -> recorder.recordPosting(transfer.id(), posted, clock.instant());
             case PostingOutcome.Rejected rejected -> recorder.recordPosting(transfer.id(), rejected, clock.instant());
             case PostingOutcome.Unknown unknown -> {
-                LOG.warn("Transfer {} stays APPROVED: posting outcome unknown ({})", transfer.id(), unknown.cause());
+                LOG.warn("Transfer stays APPROVED, posting outcome unknown: transferId={} postingId={} status={} "
+                        + "cause={}", transfer.id(), transfer.id(), transfer.status(), unknown.cause());
                 yield transfer;
             }
             case PostingOutcome.IdConflict conflict -> {
-                LOG.error("Transfer {} needs review: its posting id is taken by a different posting in "
-                        + "account-service; it stays APPROVED and is not retried", transfer.id());
+                LOG.error("Transfer needs review, posting id taken by a different posting, not retried: "
+                        + "transferId={} postingId={} status={} errorCode={}", transfer.id(), transfer.id(),
+                        transfer.status(), ReviewReason.POSTING_ID_CONFLICT);
                 recorder.flagForReview(transfer.id(), ReviewReason.POSTING_ID_CONFLICT, clock.instant());
                 yield transfer;
             }

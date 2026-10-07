@@ -82,3 +82,10 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   script) and gRPC over the real network: below-threshold transfer 201 POSTED, above-threshold 202 then 200 POSTED
   after another user's approval, the maker's own approval 422, an approval beyond the balance 200 FAILED
   `INSUFFICIENT_FUNDS` with the limit given back, ledger total 0.
+- **Log review before merging PR 6 (owner's request):** **Wrong:** two WARN lines in the gRPC gateway logged the
+  whole `Status` (its free-text description and cause) or the exception with its stack trace, and an unexpected error
+  logged a stack trace whose PostgreSQL part copied the whole failing row ("Failing row contains (... IBAN ...,
+  beneficiary name ...)"). **Caught by:** two red tests, one capturing the log output of a status whose description
+  holds an IBAN, a name and a TCKN, one asserting that a constraint violation on `transfer` does not carry the row.
+  **Fixed:** log lines carry `transferId`, `postingId`, status and codes only, and the PostgreSQL driver runs with
+  `logServerErrorDetail=false`.

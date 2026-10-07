@@ -29,9 +29,12 @@ import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.grpc.test.autoconfigure.AutoConfigureTestGrpcTransport;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.annotation.Import;
 
 /**
@@ -48,6 +51,7 @@ import org.springframework.context.annotation.Import;
 })
 @AutoConfigureTestGrpcTransport
 @Import({PostgresContainerConfiguration.class, FakeAccountServiceConfiguration.class})
+@ExtendWith(OutputCaptureExtension.class)
 class AccountServiceClientIT {
 
     private static final Duration POSTING_BUDGET = Duration.ofMillis(800);
@@ -130,6 +134,23 @@ class AccountServiceClientIT {
         assertThat(postingGateway.post(TransferId.newId(), order("1.00"))).isInstanceOf(PostingOutcome.Unknown.class);
 
         assertThat(accountService.postingRequests()).hasSize(3);
+    }
+
+    /**
+     * A status description is free text written by the other side (account-service, a proxy, the gRPC library). The
+     * log line keeps only the transfer id, the status code and account-service's error code.
+     */
+    @Test
+    void unknownOutcomeLog_carriesNoFreeTextFromTheRemoteSide(CapturedOutput output) {
+        accountService.scriptPostings((request, response) -> response.onError(Status.INTERNAL
+                .withDescription("row TR809999900000000000000001 of Mehmet Demir, TCKN 10000000146")
+                .withCause(new IllegalStateException("Mehmet Demir")).asRuntimeException()));
+        TransferId transferId = TransferId.newId();
+
+        postingGateway.post(transferId, order("1.00"));
+
+        assertThat(output.getOut()).contains(transferId.toString(), "INTERNAL")
+                .doesNotContain(SOURCE_IBAN, "Mehmet Demir", "10000000146");
     }
 
     @Test

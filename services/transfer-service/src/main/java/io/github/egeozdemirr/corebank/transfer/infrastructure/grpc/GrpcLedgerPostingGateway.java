@@ -30,6 +30,7 @@ import org.springframework.stereotype.Component;
 class GrpcLedgerPostingGateway implements LedgerPostingGateway {
 
     private static final Logger LOG = LoggerFactory.getLogger(GrpcLedgerPostingGateway.class);
+    private static final String NO_ERROR_CODE = "none";
 
     private final LedgerServiceGrpc.LedgerServiceBlockingStub ledger;
     private final AccountServiceProperties properties;
@@ -74,20 +75,27 @@ class GrpcLedgerPostingGateway implements LedgerPostingGateway {
         return ledger.withDeadline(callDeadline).postTransfer(request);
     }
 
+    /**
+     * Logs only identifiers and codes. The status description, its cause and any exception message are free text from
+     * the other side or the library and could carry personal data, so they are never logged.
+     */
     private static PostingOutcome outcomeOf(TransferId transferId, Throwable failure) {
-        if (!(failure instanceof StatusRuntimeException)) {
-            LOG.warn("Posting of transfer {} ended without a gRPC status; outcome unknown", transferId, failure);
-            return new PostingOutcome.Unknown(failure.getClass().getSimpleName());
+        if (!(failure instanceof StatusRuntimeException rejection)) {
+            String failureType = failure.getClass().getSimpleName();
+            LOG.warn("Posting outcome unknown: transferId={} postingId={} failureType={}", transferId, transferId,
+                    failureType);
+            return new PostingOutcome.Unknown(failureType);
         }
-        GrpcOutcomeClassifier.Classification classification = GrpcOutcomeClassifier.classify(failure);
+        GrpcOutcomeClassifier.Classification classification = GrpcOutcomeClassifier.classify(rejection);
+        String statusCode = rejection.getStatus().getCode().name();
         return switch (classification.kind()) {
             case DEFINITE_REJECTION -> new PostingOutcome.Rejected(new FailureReason(classification.errorCode()
                     .orElseThrow()));
             case ID_CONFLICT -> new PostingOutcome.IdConflict();
             case RETRYABLE, UNKNOWN -> {
-                LOG.warn("Posting of transfer {} has an unknown outcome: {}", transferId,
-                        ((StatusRuntimeException) failure).getStatus());
-                yield new PostingOutcome.Unknown(((StatusRuntimeException) failure).getStatus().getCode().name());
+                LOG.warn("Posting outcome unknown: transferId={} postingId={} grpcStatus={} errorCode={}", transferId,
+                        transferId, statusCode, classification.errorCode().orElse(NO_ERROR_CODE));
+                yield new PostingOutcome.Unknown(statusCode);
             }
         };
     }

@@ -4,6 +4,8 @@ import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.CHEC
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.ISTANBUL;
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.NOW;
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.POLICY;
+import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.SOURCE_IBAN;
+import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.TARGET_IBAN;
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.order;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -103,6 +105,22 @@ class TransferPersistenceIT {
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("transfer_distinct_accounts_ck");
     }
 
+    /**
+     * PostgreSQL puts the whole failing row into a constraint error ("Failing row contains ..."), and that text would
+     * end up in the logged stack trace. The transfer row holds IBANs and the beneficiary name.
+     */
+    @Test
+    void constraintViolation_doesNotCarryTheRowIntoTheException() {
+        Transfer transfer = Transfer.request(TransferId.newId(), order("75000.00"), POLICY, NOW);
+        transactionTemplate.executeWithoutResult(status -> transferWriter.add(transfer, BUSINESS_DAY));
+
+        assertThatThrownBy(() -> sql("UPDATE transfer SET checker_user_id = maker_user_id WHERE id = '"
+                + transfer.id() + "'"))
+                .satisfies(violation -> assertThat(fullText(violation))
+                        .contains("transfer_checker_is_not_maker_ck")
+                        .doesNotContain(SOURCE_IBAN, TARGET_IBAN, "Mehmet Demir"));
+    }
+
     @Test
     void reviewQueue_keepsOneEntryPerTransferAndReason() {
         Transfer transfer = Transfer.request(TransferId.newId(), order("10.00"), POLICY, NOW);
@@ -115,6 +133,14 @@ class TransferPersistenceIT {
 
         assertThat(jdbcClient.sql("SELECT COUNT(*) FROM transfer_review WHERE transfer_id = :id")
                 .param("id", transfer.id().value()).query(Long.class).single()).isOne();
+    }
+
+    private static String fullText(Throwable throwable) {
+        StringBuilder text = new StringBuilder();
+        for (Throwable cause = throwable; cause != null; cause = cause.getCause()) {
+            text.append(cause).append('\n');
+        }
+        return text.toString();
     }
 
     private void sql(String statement) {

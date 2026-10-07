@@ -8,6 +8,11 @@ spring:
     url: ${TRANSFER_DB_URL:jdbc:postgresql://localhost:5432/corebank_transfer}
     username: ${TRANSFER_DB_USERNAME}
     password: ${TRANSFER_DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        # PostgreSQL copies the whole failing row ("Failing row contains ...") into constraint errors, and the
+        # transfer row holds IBANs and the beneficiary name; without this they would reach logged stack traces.
+        logServerErrorDetail: false
   jpa:
     open-in-view: false
     hibernate:
