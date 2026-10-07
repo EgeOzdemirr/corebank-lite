@@ -1,0 +1,70 @@
+spring:
+  application:
+    name: transfer-service
+  config:
+    # Local runs read secrets from the repository's .env (never committed); containers get real env variables.
+    import: "optional:file:.env[.properties],optional:file:../../.env[.properties]"
+  datasource:
+    url: ${TRANSFER_DB_URL:jdbc:postgresql://localhost:5432/corebank_transfer}
+    username: ${TRANSFER_DB_USERNAME}
+    password: ${TRANSFER_DB_PASSWORD}
+    hikari:
+      data-source-properties:
+        # PostgreSQL copies the whole failing row ("Failing row contains ...") into constraint errors, and the
+        # transfer row holds IBANs and the beneficiary name; without this they would reach logged stack traces.
+        logServerErrorDetail: false
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+  grpc:
+    client:
+      channel:
+        account-service:
+          # Internal ledger API of account-service (ADR-0004); plaintext until roadmap week 4 adds TLS.
+          target: ${ACCOUNT_SERVICE_GRPC_TARGET:static://localhost:9090}
+
+server:
+  port: ${TRANSFER_SERVICE_PORT:8081}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+corebank:
+  transfer:
+    policy:
+      # Daily limits and approval expiry count per business day of this zone (UTC+3, no daylight saving).
+      business-zone: Europe/Istanbul
+      # Synthetic values. A transfer needs a checker only if its amount is STRICTLY GREATER than the approval
+      # threshold (equal amounts are approved automatically); single and daily limits are inclusive. Startup fails
+      # unless approval-threshold <= single-transaction-limit <= daily-limit.
+      currencies:
+        TRY:
+          approval-threshold: 50000.00
+          single-transaction-limit: 100000.00
+          daily-limit: 250000.00
+        USD:
+          approval-threshold: 2000.00
+          single-transaction-limit: 5000.00
+          daily-limit: 10000.00
+        EUR:
+          approval-threshold: 2000.00
+          single-transaction-limit: 5000.00
+          daily-limit: 10000.00
+    account-service:
+      call-deadline: 2s
+      # All attempts of one posting together; when it is spent the outcome is unknown (HTTP 202, ADR-0005).
+      posting-budget: 5s
+      retry:
+        # Only CONCURRENT_MODIFICATION (ABORTED) is retried.
+        max-retries: 3
+        initial-delay: 100ms
+        multiplier: 2
+        max-delay: 1s

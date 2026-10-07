@@ -15,11 +15,12 @@
     </Match>
 
     <!--
-        Application services receive their collaborators (ports, other services) through constructor injection.
-        Sharing those instances is the point of dependency injection, so EI_EXPOSE_REP2 does not apply to them.
+        Application services and their collaborators (transaction recorders, workflow steps) receive ports and other
+        services through constructor injection. Sharing those instances is the point of dependency injection, so
+        EI_EXPOSE_REP2 does not apply to them.
     -->
     <Match>
         <Bug pattern="EI_EXPOSE_REP2"/>
-        <Class name="~io\.github\.egeozdemirr\.corebank\.[a-z]+\.application\.[A-Za-z]+Service"/>
+        <Class name="~io\.github\.egeozdemirr\.corebank\.[a-z]+\.application\.[A-Za-z]+(Service|Recorder|Step)"/>
     </Match>
 </FindBugsFilter>

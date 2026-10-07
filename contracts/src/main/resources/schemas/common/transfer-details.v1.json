@@ -58,7 +58,7 @@
         "null"
       ],
       "minLength": 1,
-      "description": "User who approved the transfer. Null when the amount was below the approval threshold: such transfers are approved automatically and have no checker. When not null it is always different from makerUserId."
+      "description": "User who decided on the transfer as checker: who approved it, or who rejected it (TransferFailed with failureCode REJECTED_BY_CHECKER). Null when nobody decided: below the approval threshold transfers are approved automatically, and an approval that expired (APPROVAL_EXPIRED) has no checker. When not null it is always different from makerUserId."
     }
   },
   "required": [

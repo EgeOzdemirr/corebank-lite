@@ -65,3 +65,27 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   before running the build; `BusinessCalendarTest` pins the 21:00 UTC boundary. **Wrong:** after a temporary
   ArchUnit violation, `git checkout` was used to undo it on a file that was not yet tracked, so the revert silently
   did nothing. **Caught by:** checking the file afterwards; untracked files are now restored by reversing the edit.
+- **Transfer service API (week 2, PR 6):** **Wrong:** `FailureReason` declared its public constants before the
+  private pattern their constructor uses; in a record that order would throw at class initialisation. **Caught by:**
+  review before the first build; the pattern now comes first, with a comment. **Wrong:** `reject` and
+  `expireApproval` first relied on the state machine for "-> FAILED", which APPROVED also allows, so an approved
+  transfer could have been rejected. **Caught by:** review; both now require PENDING_APPROVAL, and
+  `rejection_isOnlyPossibleWhilePending` covers it. **Wrong:** the first `TransferRecorder.save` released the daily
+  limit whenever the status *was* FAILED instead of when it *became* FAILED. **Caught by:** review; the release now
+  compares the status before and after.
+- **Quality gates that pushed back:** Checkstyle (`ReturnCount` in the outcome classifier, `double` for the retry
+  multiplier - now a `BigDecimal` converted only at the call), PMD (`TooManyFields` on the entity - split into
+  embeddables like the aggregate; `NullAssignment`; `PreserveStackTrace`), SpotBugs (`EI_EXPOSE_REP2` on injected
+  collaborators that are not called `*Service`). A bulk rename turned an import into `import CustomerAccount;`; the
+  compiler caught it.
+- **Checked rather than assumed:** a smoke run with both services on a fresh PostgreSQL (created by the new init
+  script) and gRPC over the real network: below-threshold transfer 201 POSTED, above-threshold 202 then 200 POSTED
+  after another user's approval, the maker's own approval 422, an approval beyond the balance 200 FAILED
+  `INSUFFICIENT_FUNDS` with the limit given back, ledger total 0.
+- **Log review before merging PR 6 (owner's request):** **Wrong:** two WARN lines in the gRPC gateway logged the
+  whole `Status` (its free-text description and cause) or the exception with its stack trace, and an unexpected error
+  logged a stack trace whose PostgreSQL part copied the whole failing row ("Failing row contains (... IBAN ...,
+  beneficiary name ...)"). **Caught by:** two red tests, one capturing the log output of a status whose description
+  holds an IBAN, a name and a TCKN, one asserting that a constraint violation on `transfer` does not carry the row.
+  **Fixed:** log lines carry `transferId`, `postingId`, status and codes only, and the PostgreSQL driver runs with
+  `logServerErrorDetail=false`.
