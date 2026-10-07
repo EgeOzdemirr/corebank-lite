@@ -5,11 +5,21 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
 
+import com.tngtech.archunit.base.DescribedPredicate;
+import com.tngtech.archunit.core.domain.JavaCall;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
 import jakarta.persistence.Entity;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZonedDateTime;
+import java.util.Set;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -74,4 +84,33 @@ class ArchitectureTest {
 
     @ArchTest
     static final ArchRule DEPENDENCIES_ARE_CONSTRUCTOR_INJECTED = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;
+
+    /**
+     * Time comes only from the injected {@link Clock}: it is UTC, ticks in microseconds like PostgreSQL and can be
+     * fixed in tests. Reading the system time directly bypasses all three (ADR-0004).
+     */
+    @ArchTest
+    static final ArchRule TIME_COMES_ONLY_FROM_THE_CLOCK = noClasses()
+            .should().callMethodWhere(DescribedPredicate.describe(
+                    "reads the system time instead of the injected Clock",
+                    ArchitectureTest::readsSystemTime));
+
+    @ArchTest
+    static final ArchRule ONLY_CONFIGURATION_CREATES_THE_SYSTEM_CLOCK = noClasses()
+            .that().resideOutsideOfPackage("..account.infrastructure.config..")
+            .should().callMethodWhere(DescribedPredicate.describe(
+                    "creates a system clock",
+                    call -> call.getTargetOwner().isEquivalentTo(Clock.class)
+                            && call.getName().startsWith("system")));
+
+    private static final Set<Class<?>> DATE_TIME_TYPES = Set.of(Instant.class, OffsetDateTime.class,
+            ZonedDateTime.class, LocalDateTime.class, LocalDate.class, LocalTime.class);
+
+    private static boolean readsSystemTime(JavaCall<?> call) {
+        boolean noArgumentNow = "now".equals(call.getName()) && call.getTarget().getRawParameterTypes().isEmpty()
+                && DATE_TIME_TYPES.stream().anyMatch(type -> call.getTargetOwner().isEquivalentTo(type));
+        boolean currentTimeMillis = call.getTargetOwner().isEquivalentTo(System.class)
+                && "currentTimeMillis".equals(call.getName());
+        return noArgumentNow || currentTimeMillis;
+    }
 }

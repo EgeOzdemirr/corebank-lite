@@ -33,6 +33,9 @@ BSD-3 licences).
   inserter of the same id wait until the first transaction commits (then the retry reports `already_posted` with the
   original time) or rolls back (then the retry posts). A reused id with different accounts, amount or type is
   rejected. The header is append-only and must have at least two lines at commit, like the ledger itself (ADR-0002).
+- **Time precision:** the application `Clock` ticks in microseconds, the precision PostgreSQL stores, so the
+  `posted_at` returned by the first call equals the one a retry reads back on every platform (the JDK clock has
+  nanosecond digits on Linux). Production code takes time only from the injected `Clock`; ArchUnit enforces it.
 - **Ports:** account-service HTTP `8080`, gRPC `9090` (plaintext; internal network only), transfer-service HTTP `8081`.
 
 ## Alternatives

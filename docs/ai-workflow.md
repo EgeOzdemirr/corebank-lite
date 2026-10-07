@@ -47,3 +47,10 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   generated event DTOs.
 - **Checked rather than assumed:** the parallel-retry test passed on the first run, so its power was checked by a
   mutation (the posting claim always succeeding): three `LedgerGrpcServiceIT` tests failed, then the code was restored.
+- **Wrong:** used `Clock.systemUTC()` as is. A retried `PostTransfer` returned `posted_at` read back from PostgreSQL
+  (microseconds) while the first call returned the in-memory instant. **Caught by:** CI only: on Linux the JDK clock
+  has nanosecond digits (`.217269213` vs `.217269000`), on macOS it has microseconds (measured: 0 of 100,000 instants
+  with finer digits), so the local run could never fail. Fixed at the source with a microsecond `Clock.tick`; the
+  regression test uses a fixed clock with nanoseconds so it fails on every platform, and a new ArchUnit rule makes the
+  injected `Clock` the only source of time. **Lesson:** a test that depends on platform behaviour needs an input that
+  forces the behaviour, not the platform's default.
