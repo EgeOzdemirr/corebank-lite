@@ -8,6 +8,7 @@ import io.github.egeozdemirr.corebank.account.application.port.BalanceReader;
 import io.github.egeozdemirr.corebank.account.domain.account.Account;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountId;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountType;
+import io.github.egeozdemirr.corebank.account.domain.identity.Iban;
 import io.github.egeozdemirr.corebank.account.domain.money.Money;
 import java.util.ArrayList;
 import java.util.Currency;
@@ -35,6 +36,14 @@ public final class InMemoryAccountStore implements AccountReader, AccountWriter,
     @Override
     public Optional<Account> findById(AccountId accountId) {
         return Optional.ofNullable(accounts.get(accountId)).map(InMemoryAccountStore::copy);
+    }
+
+    @Override
+    public Optional<Account> findByIban(Iban iban) {
+        return accounts.values().stream()
+                .filter(account -> account.iban().equals(iban))
+                .findFirst()
+                .map(InMemoryAccountStore::copy);
     }
 
     @Override

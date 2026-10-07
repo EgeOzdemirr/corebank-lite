@@ -20,6 +20,7 @@
 
     <modules>
         <module>contracts</module>
+        <module>contracts-grpc</module>
         <module>services/gateway</module>
         <module>services/customer-service</module>
         <module>services/account-service</module>
@@ -69,6 +70,11 @@
                 <artifactId>contracts</artifactId>
                 <version>${project.version}</version>
                 <type>test-jar</type>
+            </dependency>
+            <dependency>
+                <groupId>io.github.egeozdemirr</groupId>
+                <artifactId>contracts-grpc</artifactId>
+                <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springdoc</groupId>
@@ -210,6 +216,7 @@
                     <excludes>
                         <exclude>**/*Application.class</exclude>
                         <exclude>io/github/egeozdemirr/corebank/contracts/events/**</exclude>
+                        <exclude>io/github/egeozdemirr/corebank/contracts/grpc/**</exclude>
                     </excludes>
                 </configuration>
                 <executions>

@@ -8,6 +8,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotActiveException;
+import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotEligibleForPostingException;
 import io.github.egeozdemirr.corebank.account.domain.exception.CurrencyMismatchException;
 import io.github.egeozdemirr.corebank.account.domain.exception.InsufficientFundsException;
 import io.github.egeozdemirr.corebank.account.domain.exception.InvalidHolderNameException;
@@ -104,6 +105,29 @@ class AccountTest {
                 TRY, OPENED_AT, AccountStatus.ACTIVE)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> Account.restore(funding.id(), funding.iban(), funding.owner(), OPENED_AT,
                 AccountStatus.ACTIVE, money("0.00"))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void fundingAccount_cannotTakePartInATransfer() {
+        Account funding = TestAccounts.fundingAccount(TRY);
+        LedgerEntry transferLine = new LedgerEntry(LedgerEntryId.newId(), PostingId.newId(), funding.id(),
+                EntryDirection.DEBIT, money("1.00"), PostingType.TRANSFER, OPENED_AT);
+
+        assertThatThrownBy(() -> funding.post(transferLine))
+                .isInstanceOf(AccountNotEligibleForPostingException.class)
+                .hasMessageContaining("TRANSFER");
+    }
+
+    @Test
+    void customerAccount_takesPartInBothPostingTypes() {
+        Account account = TestAccounts.customerAccount("10.00");
+
+        account.post(new LedgerEntry(LedgerEntryId.newId(), PostingId.newId(), account.id(), EntryDirection.DEBIT,
+                money("4.00"), PostingType.TRANSFER, OPENED_AT));
+
+        assertThat(account.balance()).isEqualTo(money("6.00"));
+        assertThat(PostingType.TRANSFER.customerAccountsOnly()).isTrue();
+        assertThat(PostingType.OPENING_DEPOSIT.customerAccountsOnly()).isFalse();
     }
 
     @Test

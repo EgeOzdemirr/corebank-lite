@@ -12,12 +12,16 @@ Context for AI assistants (and humans) working in this repository.
 ## Architecture
 
 - Maven multi-module monorepo, Java 21, Spring Boot 4.1.x, Spring Cloud 2025.1.x (BOM only so far).
-- `contracts/`: versioned JSON Schemas and generated DTOs. The only shared code. See ADR-0001.
+- `contracts/`: versioned JSON Schemas and generated DTOs for events. See ADR-0001.
+- `contracts-grpc/`: versioned `.proto` files and generated stubs for internal synchronous calls (transfer-service ->
+  account-service). Kept apart so event consumers do not depend on gRPC. See ADR-0004.
+- The two contract modules are the only shared code; domain code is never shared between services.
 - `services/account-service/`: accounts, double-entry ledger, balances, transactional outbox. PostgreSQL + Flyway.
 - `services/{gateway,customer-service,transfer-service,audit-service,notification-service}/`: skeletons; each gets its
   dependencies in the roadmap week that implements it.
 - Reserved for P4: `services/aml-monitor/` and `tools/synthetic-generator/` (do not create them yet).
 - Infrastructure for local runs: `docker-compose.yml` (PostgreSQL, Kafka in KRaft mode, topic creation).
+- Ports: account-service HTTP 8080 and gRPC 9090, transfer-service HTTP 8081 (configurable through `.env`).
 
 ### Layers inside a service
 
@@ -31,8 +35,10 @@ infrastructure (implements application ports)
 - `application`: use cases and ports (interfaces). Depends only on the domain; the application layer may use Spring's
   `@Service` and `@Transactional` annotations, a deliberate trade-off that keeps transaction boundaries visible on the
   use case without an extra decorator layer, and nothing else from Spring.
-- `api`: HTTP translation only (request -> command, result -> response). One global exception handler.
-- `infrastructure`: JPA/JDBC adapters, outbox, configuration. Only the outbox adapter knows the event contracts.
+- `api`: HTTP and gRPC translation only (request -> command, result -> response). One exception handler per protocol
+  (`GlobalExceptionHandler`, `GrpcExceptionTranslator`), both mapping by `ErrorCategory`.
+- `infrastructure`: JPA/JDBC adapters, outbox, configuration. Only the outbox adapter knows the event contracts; only
+  the gRPC adapter knows the gRPC contracts.
 
 ## P4 integration rules
 

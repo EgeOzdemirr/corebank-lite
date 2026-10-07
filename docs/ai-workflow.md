@@ -40,3 +40,21 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   `FOR NO KEY UPDATE` on PostgreSQL, and the ADR explains why that is the better lock here.
 - **Transfer event contracts:** no gate pushback. Repeated the week 1 check of building `contracts` three times in a
   row without `clean`; the generated `TransferRequested*` and `TransferFailed*` classes were present every time.
+- **gRPC posting API (ADR-0004):** **Wrong:** kept the ArchUnit rule "only the outbox knows `contracts..`", which
+  also matched the new gRPC stubs. **Caught by:** `ArchitectureTest`; split into one rule for event contracts and one
+  for gRPC contracts. **Wrong:** an `EnumMap` for the status mapping. **Caught by:** PMD `UseConcurrentHashMap`;
+  replaced by an immutable `Map.of`. SpotBugs flagged 23 issues in protoc output, which is now excluded like the
+  generated event DTOs.
+- **Checked rather than assumed:** the parallel-retry test passed on the first run, so its power was checked by a
+  mutation (the posting claim always succeeding): three `LedgerGrpcServiceIT` tests failed, then the code was restored.
+- **Wrong:** used `Clock.systemUTC()` as is. A retried `PostTransfer` returned `posted_at` read back from PostgreSQL
+  (microseconds) while the first call returned the in-memory instant. **Caught by:** CI only: on Linux the JDK clock
+  has nanosecond digits (`.217269213` vs `.217269000`), on macOS it has microseconds (measured: 0 of 100,000 instants
+  with finer digits), so the local run could never fail. Fixed at the source with a microsecond `Clock.tick`; the
+  regression test uses a fixed clock with nanoseconds so it fails on every platform, and a new ArchUnit rule makes the
+  injected `Clock` the only source of time. **Lesson:** a test that depends on platform behaviour needs an input that
+  forces the behaviour, not the platform's default.
+- **Review follow-ups on the gRPC PR:** each new test was checked for power by a temporary mutation: moving the
+  posting claim into its own transaction fails all `LedgerGrpcServiceIT` tests (the deferred trigger refuses a header
+  without lines), and enabling reflection by default fails `reflection_isOffByDefault`. The error table in ADR-0004
+  is backed by an end-to-end test for every row a transfer can reach.

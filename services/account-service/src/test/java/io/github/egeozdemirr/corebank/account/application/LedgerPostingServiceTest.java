@@ -32,7 +32,7 @@ class LedgerPostingServiceTest {
         accounts.add(payee);
         Posting posting = posting(payer.id(), payee.id(), "40.00");
 
-        service.post(posting);
+        assertThat(service.post(posting)).isEqualTo(PostingOutcome.POSTED);
 
         assertThat(accounts.stored(payer.id()).balance()).isEqualTo(money("60.00"));
         assertThat(accounts.stored(payee.id()).balance()).isEqualTo(money("45.00"));
@@ -95,6 +95,22 @@ class LedgerPostingServiceTest {
         assertThat(accounts.stored(payer.id()).balance()).isEqualTo(money("10.00"));
         assertThat(accounts.updateOrder()).isEmpty();
         assertThat(ledger.postings()).isEmpty();
+    }
+
+    @Test
+    void post_withAlreadyRecordedId_changesNothing() {
+        Account payer = TestAccounts.customerAccount("100.00");
+        Account payee = TestAccounts.customerAccount("0.00");
+        accounts.add(payer);
+        accounts.add(payee);
+        Posting posting = posting(payer.id(), payee.id(), "10.00");
+        service.post(posting);
+
+        PostingOutcome outcome = service.post(posting);
+
+        assertThat(outcome).isEqualTo(PostingOutcome.ALREADY_RECORDED);
+        assertThat(accounts.stored(payer.id()).balance()).isEqualTo(money("90.00"));
+        assertThat(ledger.postings()).hasSize(1);
     }
 
     @Test

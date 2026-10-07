@@ -34,12 +34,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     private static final Map<ErrorCategory, HttpStatus> STATUS_BY_CATEGORY = Map.of(
             ErrorCategory.INVALID_INPUT, HttpStatus.BAD_REQUEST,
             ErrorCategory.NOT_FOUND, HttpStatus.NOT_FOUND,
-            ErrorCategory.RULE_VIOLATION, HttpStatus.UNPROCESSABLE_CONTENT);
+            ErrorCategory.RULE_VIOLATION, HttpStatus.UNPROCESSABLE_CONTENT,
+            ErrorCategory.CONFLICT, HttpStatus.CONFLICT);
 
     @ExceptionHandler(DomainException.class)
     ProblemDetail handleDomainException(DomainException exception) {
         LOG.info("Request rejected: {} - {}", exception.errorCode(), exception.getMessage());
-        return problem(STATUS_BY_CATEGORY.get(exception.category()), exception.errorCode(), exception.getMessage());
+        return problem(statusFor(exception.category()), exception.errorCode(), exception.getMessage());
     }
 
     @ExceptionHandler(OptimisticLockingFailureException.class)
@@ -68,6 +69,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             problemDetail.setProperty(ERROR_CODE_PROPERTY, INVALID_REQUEST);
         }
         return response;
+    }
+
+    static HttpStatus statusFor(ErrorCategory category) {
+        return STATUS_BY_CATEGORY.get(category);
     }
 
     private static ProblemDetail problem(HttpStatus status, String errorCode, String detail) {

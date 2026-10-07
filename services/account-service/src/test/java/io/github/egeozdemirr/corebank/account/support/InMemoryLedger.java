@@ -7,19 +7,34 @@ import io.github.egeozdemirr.corebank.account.application.port.LedgerWriter;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountId;
 import io.github.egeozdemirr.corebank.account.domain.ledger.LedgerEntry;
 import io.github.egeozdemirr.corebank.account.domain.ledger.Posting;
+import io.github.egeozdemirr.corebank.account.domain.ledger.PostingId;
 import io.github.egeozdemirr.corebank.account.domain.money.Money;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Currency;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 public final class InMemoryLedger implements LedgerReader, LedgerWriter {
 
     private final List<Posting> postings = new ArrayList<>();
+    private final Set<PostingId> claimedIds = new HashSet<>();
+
+    @Override
+    public boolean claim(Posting posting) {
+        return claimedIds.add(posting.id());
+    }
 
     @Override
     public void append(Posting posting) {
         postings.add(posting);
+    }
+
+    @Override
+    public Optional<Posting> findPosting(PostingId postingId) {
+        return postings.stream().filter(posting -> posting.id().equals(postingId)).findFirst();
     }
 
     @Override

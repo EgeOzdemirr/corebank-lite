@@ -1,6 +1,7 @@
 package io.github.egeozdemirr.corebank.account.domain.account;
 
 import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotActiveException;
+import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotEligibleForPostingException;
 import io.github.egeozdemirr.corebank.account.domain.exception.CurrencyMismatchException;
 import io.github.egeozdemirr.corebank.account.domain.exception.InsufficientFundsException;
 import io.github.egeozdemirr.corebank.account.domain.exception.InvalidPostingException;
@@ -64,6 +65,9 @@ public final class Account {
      */
     public void post(LedgerEntry entry) {
         requireOwnEntry(entry);
+        if (entry.postingType().customerAccountsOnly() && type() != AccountType.CUSTOMER) {
+            throw new AccountNotEligibleForPostingException(id, entry.postingType());
+        }
         requireActive();
         requireOwnCurrency(entry);
         if (!type().materialisesBalance()) {

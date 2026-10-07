@@ -6,11 +6,13 @@ import io.github.egeozdemirr.corebank.account.domain.exception.UnbalancedPosting
 import io.github.egeozdemirr.corebank.account.domain.money.Money;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
- * A balanced set of ledger entries recorded together. Invariant: at least two lines, one currency, every line
- * belongs to this posting, and the signed amounts sum to zero (double-entry bookkeeping).
+ * A balanced set of ledger entries recorded together. Invariant: at least two lines, one currency, one posting type,
+ * every line belongs to this posting, and the signed amounts sum to zero (double-entry bookkeeping).
  */
 public final class Posting {
 
@@ -24,6 +26,7 @@ public final class Posting {
         this.entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
         requireEnoughEntries();
         requireEntriesOfThisPosting();
+        requireSingleType();
         requireBalanced();
     }
 
@@ -53,9 +56,30 @@ public final class Posting {
         return entries;
     }
 
+    public PostingType type() {
+        return entries.getFirst().postingType();
+    }
+
+    public Instant postedAt() {
+        return entries.getFirst().postedAt();
+    }
+
+    /**
+     * True if the other posting moves the same amounts between the same accounts in the same directions for the same
+     * reason. Ids and timestamps are ignored: this is how a retried request is told apart from a conflicting one.
+     */
+    public boolean describesSameMovementAs(Posting other) {
+        return type() == other.type() && movements().equals(other.movements());
+    }
+
     /** Distinct accounts of this posting in lock order (see {@link AccountId#compareTo}). */
     public List<AccountId> accountIdsInLockOrder() {
         return entries.stream().map(LedgerEntry::accountId).distinct().sorted().toList();
+    }
+
+    private Map<AccountId, Money> movements() {
+        return entries.stream().collect(Collectors.toMap(LedgerEntry::accountId, LedgerEntry::signedAmount,
+                Money::plus));
     }
 
     private void requireEnoughEntries() {
@@ -68,6 +92,13 @@ public final class Posting {
         boolean foreignEntry = entries.stream().anyMatch(entry -> !entry.postingId().equals(id));
         if (foreignEntry) {
             throw new InvalidPostingException("Posting " + id + " contains entries of another posting");
+        }
+    }
+
+    private void requireSingleType() {
+        boolean mixedTypes = entries.stream().map(LedgerEntry::postingType).distinct().count() > 1;
+        if (mixedTypes) {
+            throw new InvalidPostingException("Posting " + id + " mixes posting types");
         }
     }
 

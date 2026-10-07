@@ -7,6 +7,7 @@ import io.github.egeozdemirr.corebank.account.domain.account.Account;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountId;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountType;
 import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotFoundException;
+import io.github.egeozdemirr.corebank.account.domain.identity.Iban;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.util.Currency;
@@ -27,6 +28,11 @@ class JpaAccountStore implements AccountReader, AccountWriter, AccountLocker {
     @Override
     public Optional<Account> findById(AccountId accountId) {
         return repository.findById(accountId.value()).map(AccountJpaEntity::toDomain);
+    }
+
+    @Override
+    public Optional<Account> findByIban(Iban iban) {
+        return repository.findByIban(iban.value()).map(AccountJpaEntity::toDomain);
     }
 
     @Override

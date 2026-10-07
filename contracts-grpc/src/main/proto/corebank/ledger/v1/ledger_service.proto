@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+// Internal API of account-service, called by transfer-service. It is not exposed through the gateway.
+package corebank.ledger.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option java_multiple_files = true;
+option java_package = "io.github.egeozdemirr.corebank.contracts.grpc.ledger.v1";
+option java_outer_classname = "LedgerServiceProto";
+
+// Errors use the standard gRPC status codes with a google.rpc.ErrorInfo detail whose reason is the stable error code
+// of account-service (for example INSUFFICIENT_FUNDS) and whose domain is "account-service" (full table: ADR-0004).
+//   INVALID_ARGUMENT     malformed request (bad id, IBAN, amount or currency)          definite rejection
+//   NOT_FOUND            the account does not exist or is not a customer account       definite rejection
+//   FAILED_PRECONDITION  a business rule rejected the request (insufficient funds, ...) definite rejection
+//   ALREADY_EXISTS       the posting id was already used for a different posting       caller bug, not definite
+//   ABORTED              concurrent modification; retry with the same posting id       not definite
+//   INTERNAL             anything else                                                  outcome unknown
+// A status is a definite rejection only if it is one of the first three AND carries an ErrorInfo from
+// "account-service". Everything else, including INTERNAL, UNKNOWN, DEADLINE_EXCEEDED, UNAVAILABLE and any status
+// without that ErrorInfo, leaves the outcome of PostTransfer unknown: retry later with the same posting_id.
+service LedgerService {
+  // A customer account by id. The bank's own accounts are not transfer endpoints and are reported as NOT_FOUND.
+  rpc GetCustomerAccount(GetCustomerAccountRequest) returns (CustomerAccount);
+
+  // A customer account by IBAN, with the same visibility rule as GetCustomerAccount.
+  rpc FindCustomerAccountByIban(FindCustomerAccountByIbanRequest) returns (CustomerAccount);
+
+  // Moves money between two customer accounts as one balanced posting. Idempotent on posting_id: repeating a call
+  // with the same posting_id and the same content returns the original result with already_posted = true, also
+  // while the first call is still running, so a caller may safely retry after a timeout.
+  rpc PostTransfer(PostTransferRequest) returns (PostTransferResponse);
+}
+
+// Money as a decimal string with exactly two fraction digits ("1500.00") and an ISO 4217 code, never a float.
+message MonetaryAmount {
+  string amount = 1;
+  string currency = 2;
+}
+
+enum AccountStatus {
+  ACCOUNT_STATUS_UNSPECIFIED = 0;
+  ACCOUNT_STATUS_ACTIVE = 1;
+  ACCOUNT_STATUS_CLOSED = 2;
+}
+
+message GetCustomerAccountRequest {
+  // UUID.
+  string account_id = 1;
+}
+
+message FindCustomerAccountByIbanRequest {
+  // Turkish IBAN without spaces.
+  string iban = 1;
+}
+
+// Only what a transfer needs: no holder name, no TCKN, no balance.
+message CustomerAccount {
+  string account_id = 1;
+  string iban = 2;
+  string currency = 3;
+  AccountStatus status = 4;
+}
+
+message PostTransferRequest {
+  // UUID chosen by the caller and used as the idempotency key; transfer-service uses the transfer id.
+  string posting_id = 1;
+  // UUID of the customer account that is debited.
+  string debit_account_id = 2;
+  // UUID of the customer account that is credited.
+  string credit_account_id = 3;
+  MonetaryAmount amount = 4;
+}
+
+message PostTransferResponse {
+  string posting_id = 1;
+  google.protobuf.Timestamp posted_at = 2;
+  // True when this call found the posting already recorded by an earlier call with the same posting_id.
+  bool already_posted = 3;
+}
