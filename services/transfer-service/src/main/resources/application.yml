@@ -18,3 +18,22 @@ spring:
           time_zone: UTC
   flyway:
     locations: classpath:db/migration
+  grpc:
+    client:
+      channel:
+        account-service:
+          # Internal ledger API of account-service (ADR-0004); plaintext until roadmap week 4 adds TLS.
+          target: ${ACCOUNT_SERVICE_GRPC_TARGET:static://localhost:9090}
+
+corebank:
+  transfer:
+    account-service:
+      call-deadline: 2s
+      # All attempts of one posting together; when it is spent the outcome is unknown (HTTP 202, ADR-0005).
+      posting-budget: 5s
+      retry:
+        # Only CONCURRENT_MODIFICATION (ABORTED) is retried.
+        max-retries: 3
+        initial-delay: 100ms
+        multiplier: 2
+        max-delay: 1s
