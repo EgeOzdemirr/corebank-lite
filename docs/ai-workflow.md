@@ -58,3 +58,10 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   posting claim into its own transaction fails all `LedgerGrpcServiceIT` tests (the deferred trigger refuses a header
   without lines), and enabling reflection by default fails `reflection_isOffByDefault`. The error table in ADR-0004
   is backed by an end-to-end test for every row a transfer can reach.
+- **Transfer domain (week 2, PR 5):** **Wrong:** the first state machine was a `switch` with `||` conditions and
+  `Transfer.restore` took seven parameters. **Caught by:** Checkstyle (`CyclomaticComplexity`, `ParameterNumber`);
+  the state machine is now one table of allowed steps, and persistence goes through a `TransferSnapshot`. **Wrong:**
+  a first draft of a Javadoc contradicted itself about the Istanbul day boundary. **Caught by:** reading the diff
+  before running the build; `BusinessCalendarTest` pins the 21:00 UTC boundary. **Wrong:** after a temporary
+  ArchUnit violation, `git checkout` was used to undo it on a file that was not yet tracked, so the revert silently
+  did nothing. **Caught by:** checking the file afterwards; untracked files are now restored by reversing the edit.

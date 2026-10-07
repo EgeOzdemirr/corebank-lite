@@ -13,12 +13,23 @@
 
     <artifactId>transfer-service</artifactId>
     <name>transfer-service</name>
-    <description>Transfers, state machine, limits, maker-checker, idempotency and saga (roadmap week 2). Skeleton only; its dependencies arrive in the roadmap week that implements it.</description>
+    <description>Transfers, state machine, limits, maker-checker, idempotency and saga. The domain model is framework-free; its application, persistence and API layers arrive in the next step of roadmap week 2.</description>
 
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
