@@ -80,6 +80,7 @@ _A demo GIF will be added in week 6._
 
 - [ADR-0001: Event contracts are designed for the transaction monitoring component](docs/adr/0001-event-contracts-designed-for-transaction-monitoring.md)
 - [ADR-0002: Ledger immutability is enforced in the database as well as in the application](docs/adr/0002-ledger-immutability-enforced-in-database.md)
+- [ADR-0003: Funding balances are derived from the ledger; customer accounts are row-locked in id order](docs/adr/0003-hot-account-contention.md)
 
 Further decisions in code, each enforced by a test:
 
@@ -88,9 +89,11 @@ Further decisions in code, each enforced by a test:
 - **Double-entry ledger:** every posting has at least two lines that sum to zero. The domain rejects unbalanced
   postings, and a deferred PostgreSQL constraint trigger rejects them at commit even if application code is bypassed.
   Ledger rows are append-only: UPDATE, DELETE and TRUNCATE are rejected by triggers (ADR-0002).
-- **Balance** is a materialised field guarded by JPA optimistic locking (`@Version`); a lost update becomes HTTP 409.
-- **Negative balances** depend on the account type: customer accounts cannot go below zero, the bank's funding
-  accounts (the contra side of opening deposits) can.
+- **Balances** depend on the account type (ADR-0003). Customer accounts keep a materialised balance that cannot go
+  below zero; postings lock them in account id order (`SELECT ... FOR NO KEY UPDATE`), so concurrent postings neither
+  lose updates nor deadlock, and `@Version` remains as a second guard. The bank's funding accounts (the contra side of
+  opening deposits) may go negative and do not store a balance at all: it is derived from the ledger, so concurrent
+  openings never contend for their row.
 - **Transactional outbox:** `AccountOpened` is written in the same transaction as the account. The relay to Kafka
   comes in week 3.
 - **Layering** (`api -> application -> domain`, infrastructure behind ports) is enforced by ArchUnit.
@@ -111,12 +114,12 @@ Further decisions in code, each enforced by a test:
 | Line coverage of at least 80% | JaCoCo |
 | Secrets | gitleaks (pre-commit hook and CI) |
 
-Current numbers (week 1):
+Current numbers (week 2, in progress):
 
 | Module | Tests | Line coverage | Branch coverage |
 | --- | --- | --- | --- |
 | contracts | 19 | 100% | n/a |
-| account-service | 151 unit + 15 integration | 99.8% | 94.6% |
+| account-service | 157 unit + 19 integration | 99.6% | 93.8% |
 
 Performance measurements (k6, p95 latency) will be added in week 6.
 
@@ -126,17 +129,18 @@ Performance measurements (k6, p95 latency) will be added in week 6.
 - Outbox rows are not yet relayed to Kafka (week 3).
 - No authentication yet: the acting user comes from the `X-Actor-User-Id` header until Keycloak and the gateway
   arrive (week 4).
-- Every opening deposit updates the same funding account row, so concurrent openings in one currency may receive
-  HTTP 409 and need a retry. Locking strategies are compared in week 2.
+- Postings on one customer account are serialised by its row lock (a little under 500 per second per account in the
+  ADR-0003 measurement). A funding account's balance is a sum over its ledger lines; periodic snapshots are the
+  planned answer if that read becomes slow.
 - Only PostgreSQL; the Oracle reporting profile comes later (the Oracle image needs extra care on Apple Silicon).
 
 ---
 
 ## Türkçe özet
 
-corebank-lite; hesap, havale ve çift taraflı defter servislerinden oluşan küçük bir çekirdek bankacılık sistemidir.
-Para `BigDecimal` (2 ondalık, HALF_EVEN) ile tutulur, her kayıt borç ve alacak olarak toplamı sıfır olacak şekilde
-deftere yazılır, bakiye iyimser kilitle korunur ve her iş değişikliği aynı veritabanı işleminde outbox tablosuna olay
-olarak düşer. Olay sözleşmeleri (`contracts`) sürümlüdür ve ileride aynı repoya `services/aml-monitor/` olarak
-eklenecek işlem izleme bileşeni düşünülerek tasarlanmıştır (ADR-0001). **Kişisel veri işlenmez;** tüm veriler
-sentetiktir.
+corebank-lite; hesap, havale ve çift taraflı defter servislerinden oluşan küçük bir çekirdek bankacılık sistemidir. Para
+`BigDecimal` (2 ondalık, HALF_EVEN) ile tutulur, her kayıt borç ve alacak olarak toplamı sıfır olacak şekilde deftere
+yazılır, müşteri bakiyeleri hesap id sırasıyla satır kilidiyle korunur, funding bakiyeleri defterden türetilir
+(ADR-0003) ve her iş değişikliği aynı veritabanı işleminde outbox tablosuna olay olarak düşer. Olay sözleşmeleri
+(`contracts`) sürümlüdür ve ileride aynı repoya `services/aml-monitor/` olarak eklenecek işlem izleme bileşeni
+düşünülerek tasarlanmıştır (ADR-0001). **Kişisel veri işlenmez;** tüm veriler sentetiktir.

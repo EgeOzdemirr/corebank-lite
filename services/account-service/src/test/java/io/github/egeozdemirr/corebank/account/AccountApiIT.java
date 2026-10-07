@@ -64,6 +64,21 @@ class AccountApiIT {
     }
 
     @Test
+    void fundingAccount_isNeitherWrittenNorStoresABalance() {
+        long versionBefore = fundingVersion();
+
+        openAccount("TRY", "20.00", "trace-it-5", "maker-5");
+
+        assertThat(fundingVersion()).isEqualTo(versionBefore);
+        assertThat(jdbcClient.sql("SELECT balance IS NULL FROM account WHERE id = :id")
+                .param("id", TRY_FUNDING_ACCOUNT).query(Boolean.class).single()).isTrue();
+        String derivedBalance = balanceOf(TRY_FUNDING_ACCOUNT).toPlainString();
+        assertThat(mvc.get().uri(ACCOUNTS + "/{id}", TRY_FUNDING_ACCOUNT).exchange())
+                .hasStatus(HttpStatus.OK)
+                .bodyJson().extractingPath("$.balance.amount").isEqualTo(derivedBalance);
+    }
+
+    @Test
     void openAccount_writesContractConformingEventToOutbox() {
         MvcTestResult created = openAccount("TRY", null, "trace-it-2", "maker-2");
         String accountId = read(created).get("accountId").asString();
@@ -139,9 +154,10 @@ class AccountApiIT {
         return jsonMapper.readTree(result.getResponse().getContentAsByteArray());
     }
 
+    /** Through the API, so funding accounts report their ledger-derived balance (ADR-0003). */
     private BigDecimal balanceOf(UUID accountId) {
-        return jdbcClient.sql("SELECT balance FROM account WHERE id = :id")
-                .param("id", accountId).query(BigDecimal.class).single();
+        MvcTestResult balance = mvc.get().uri(ACCOUNTS + "/{id}/balance", accountId).exchange();
+        return new BigDecimal(read(balance).get("balance").get("amount").asString());
     }
 
     private BigDecimal signedTotalOfPostingsTouching(UUID accountId) {
@@ -151,6 +167,11 @@ class AccountApiIT {
                          WHERE posting_id IN (SELECT posting_id FROM ledger_entry WHERE account_id = :id)
                         """)
                 .param("id", accountId).query(BigDecimal.class).single();
+    }
+
+    private long fundingVersion() {
+        return jdbcClient.sql("SELECT version FROM account WHERE id = :id")
+                .param("id", TRY_FUNDING_ACCOUNT).query(Long.class).single();
     }
 
     private long count(String table) {

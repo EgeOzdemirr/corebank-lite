@@ -20,8 +20,8 @@ import org.junit.jupiter.api.Test;
 
 class QueryServicesTest {
 
-    private final InMemoryAccountStore accounts = new InMemoryAccountStore();
     private final InMemoryLedger ledger = new InMemoryLedger();
+    private final InMemoryAccountStore accounts = new InMemoryAccountStore(ledger);
     private final AccountQueryService accountQueries = new AccountQueryService(accounts, accounts);
     private final LedgerQueryService ledgerQueries = new LedgerQueryService(accounts, ledger);
 
@@ -30,10 +30,25 @@ class QueryServicesTest {
         Account account = TestAccounts.customerAccount("42.50");
         accounts.add(account);
 
-        assertThat(accountQueries.getAccount(account.id())).isEqualTo(account);
+        AccountDetails details = accountQueries.getAccount(account.id());
+        assertThat(details.account()).isEqualTo(account);
+        assertThat(details.balance()).isEqualTo(money("42.50"));
         AccountBalance balance = accountQueries.getBalance(account.id());
         assertThat(balance.balance()).isEqualTo(money("42.50"));
         assertThat(balance.iban()).isEqualTo(account.iban());
+    }
+
+    @Test
+    void fundingAccount_showsBalanceDerivedFromTheLedger() {
+        Account funding = TestAccounts.fundingAccount(TRY);
+        Account customer = TestAccounts.customerAccount("0.00");
+        accounts.add(funding);
+        accounts.add(customer);
+        ledger.append(Posting.between(PostingId.newId(), PostingType.OPENING_DEPOSIT, funding.id(), customer.id(),
+                money("75.00"), OPENED_AT));
+
+        assertThat(accountQueries.getAccount(funding.id()).balance()).isEqualTo(money("-75.00"));
+        assertThat(accountQueries.getBalance(funding.id()).balance()).isEqualTo(money("-75.00"));
     }
 
     @Test

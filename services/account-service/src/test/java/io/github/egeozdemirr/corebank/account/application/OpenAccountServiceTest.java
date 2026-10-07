@@ -37,8 +37,8 @@ class OpenAccountServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-10-06T12:00:00Z");
 
-    private final InMemoryAccountStore accounts = new InMemoryAccountStore();
     private final InMemoryLedger ledger = new InMemoryLedger();
+    private final InMemoryAccountStore accounts = new InMemoryAccountStore(ledger);
     private final List<AccountOpened> publishedEvents = new ArrayList<>();
     private Account fundingAccount;
     private OpenAccountService service;
@@ -84,7 +84,9 @@ class OpenAccountServiceTest {
         Account account = service.open(command("1500.00"));
 
         assertThat(account.balance()).isEqualTo(money("1500.00"));
-        assertThat(accounts.stored(fundingAccount.id()).balance()).isEqualTo(money("-1500.00"));
+        assertThat(accounts.findBalance(fundingAccount.id())).get()
+                .extracting(AccountBalance::balance).isEqualTo(money("-1500.00"));
+        assertThat(accounts.updateOrder()).doesNotContain(fundingAccount.id());
 
         Posting posting = ledger.postings().getFirst();
         assertThat(posting.entries()).extracting(LedgerEntry::postingType).containsOnly(PostingType.OPENING_DEPOSIT);

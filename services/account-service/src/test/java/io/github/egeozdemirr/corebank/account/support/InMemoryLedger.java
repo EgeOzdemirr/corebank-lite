@@ -7,8 +7,10 @@ import io.github.egeozdemirr.corebank.account.application.port.LedgerWriter;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountId;
 import io.github.egeozdemirr.corebank.account.domain.ledger.LedgerEntry;
 import io.github.egeozdemirr.corebank.account.domain.ledger.Posting;
+import io.github.egeozdemirr.corebank.account.domain.money.Money;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Currency;
 import java.util.List;
 
 public final class InMemoryLedger implements LedgerReader, LedgerWriter {
@@ -36,5 +38,14 @@ public final class InMemoryLedger implements LedgerReader, LedgerWriter {
 
     public List<Posting> postings() {
         return List.copyOf(postings);
+    }
+
+    /** Signed sum of an account's lines: what the real store derives for accounts without a stored balance. */
+    public Money balanceOf(AccountId accountId, Currency currency) {
+        return postings.stream()
+                .flatMap(posting -> posting.entries().stream())
+                .filter(entry -> entry.accountId().equals(accountId))
+                .map(LedgerEntry::signedAmount)
+                .reduce(Money.zero(currency), Money::plus);
     }
 }
