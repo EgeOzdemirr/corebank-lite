@@ -41,7 +41,7 @@ flowchart LR
 | `contracts` | done | Versioned event schemas (JSON Schema) and generated DTOs, shared with `aml-monitor` |
 | `contracts-grpc` | done | Versioned `.proto` of the internal ledger API and generated gRPC stubs |
 | `services/account-service` | done | Account opening, double-entry ledger, balances, transactional outbox, internal gRPC posting API |
-| `services/transfer-service` | skeleton | Transfers, state machine, limits, maker-checker, idempotency, saga |
+| `services/transfer-service` | in progress | Transfers, state machine, limits, maker-checker, idempotency, saga (domain model done) |
 | `services/customer-service` | skeleton | Customers, KYC status, synthetic TCKN validation |
 | `services/gateway` | skeleton | Routing, JWT validation, rate limiting |
 | `services/audit-service` | skeleton | Append-only, hash-chained audit trail |
@@ -111,6 +111,13 @@ Further decisions in code, each enforced by a test:
   can be retried without moving money twice. Errors carry a stable code in `google.rpc.ErrorInfo`.
 - **Transactional outbox:** `AccountOpened` is written in the same transaction as the account. The relay to Kafka
   comes in week 3.
+- **Transfer state machine:** CREATED -> PENDING_APPROVAL (above the approval threshold) -> APPROVED -> POSTED, with
+  FAILED and REVERSED as error paths. One table in `TransferStatus` defines every allowed step; any other step throws
+  `InvalidStateTransitionException`, and a test covers all 36 status pairs.
+- **Maker-checker:** the user who created a transfer above the threshold cannot approve it. Below the threshold a
+  transfer is approved automatically and has no checker (`checkerUserId` is null in events).
+- **Limits per currency:** approval threshold, single transaction limit and daily limit come from configuration and
+  must satisfy threshold <= single <= daily. The daily total counts per Europe/Istanbul business day.
 - **Layering** (`api -> application -> domain`, infrastructure behind ports) is enforced by ArchUnit.
 
 ## Tests and quality
@@ -135,12 +142,14 @@ Current numbers (week 2, in progress):
 | --- | --- | --- | --- |
 | contracts | 32 | 100% | n/a |
 | account-service | 190 unit + 34 integration | 99.6% | 93.8% |
+| transfer-service (domain) | 125 unit | 99.7% | 90.0% |
 
 Performance measurements (k6, p95 latency) will be added in week 6.
 
 ## Known limitations
 
-- Only account-service is implemented; the other services are skeletons.
+- account-service is implemented; transfer-service has its domain model, its API arrives next. The other services are
+  skeletons.
 - Outbox rows are not yet relayed to Kafka (week 3).
 - No authentication yet: the acting user comes from the `X-Actor-User-Id` header until Keycloak and the gateway
   arrive (week 4).
