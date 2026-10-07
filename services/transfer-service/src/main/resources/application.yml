@@ -25,8 +25,34 @@ spring:
           # Internal ledger API of account-service (ADR-0004); plaintext until roadmap week 4 adds TLS.
           target: ${ACCOUNT_SERVICE_GRPC_TARGET:static://localhost:9090}
 
+server:
+  port: ${TRANSFER_SERVICE_PORT:8081}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
 corebank:
   transfer:
+    policy:
+      # Daily limits and approval expiry count per business day of this zone (UTC+3, no daylight saving).
+      business-zone: Europe/Istanbul
+      # Synthetic values. A transfer needs a checker only if its amount is STRICTLY GREATER than the approval
+      # threshold (equal amounts are approved automatically); single and daily limits are inclusive. Startup fails
+      # unless approval-threshold <= single-transaction-limit <= daily-limit.
+      currencies:
+        TRY:
+          approval-threshold: 50000.00
+          single-transaction-limit: 100000.00
+          daily-limit: 250000.00
+        USD:
+          approval-threshold: 2000.00
+          single-transaction-limit: 5000.00
+          daily-limit: 10000.00
+        EUR:
+          approval-threshold: 2000.00
+          single-transaction-limit: 5000.00
+          daily-limit: 10000.00
     account-service:
       call-deadline: 2s
       # All attempts of one posting together; when it is spent the outcome is unknown (HTTP 202, ADR-0005).

@@ -1,7 +1,6 @@
-package io.github.egeozdemirr.corebank.transfer.infrastructure.config;
+package io.github.egeozdemirr.corebank.transfer.infrastructure.grpc;
 
 import io.github.egeozdemirr.corebank.contracts.grpc.ledger.v1.LedgerServiceGrpc;
-import io.github.egeozdemirr.corebank.transfer.infrastructure.grpc.AccountServiceProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.grpc.client.ImportGrpcClients;
