@@ -146,14 +146,45 @@ class LedgerGrpcServiceIT {
         assertThat(entriesOf(postingId)).isEqualTo(2);
     }
 
+    /** Same id, different content: a conflict, never "already posted", and the recorded posting stays as it was. */
     @Test
-    void reusedPostingIdForAnotherAmount_isRejectedAndChangesNothing() {
+    void reusedPostingIdWithDifferentContent_isConflictNotAlreadyPosted() {
         UUID postingId = UUID.randomUUID();
+        Account otherPayee = open("0.00");
         ledger.postTransfer(transfer(postingId, "40.00"));
 
-        assertRejected(() -> ledger.postTransfer(transfer(postingId, "41.00")),
-                Status.Code.ALREADY_EXISTS, "POSTING_ID_CONFLICT");
+        List<PostTransferRequest> differentContent = List.of(
+                transfer(postingId, "41.00"),
+                transfer(postingId, payer.id().toString(), otherPayee.id().toString(), "40.00"),
+                transfer(postingId, payee.id().toString(), payer.id().toString(), "40.00"),
+                transfer(postingId, "40.00").toBuilder()
+                        .setAmount(MonetaryAmount.newBuilder().setAmount("40.00").setCurrency("USD")).build());
+
+        for (PostTransferRequest request : differentContent) {
+            assertRejected(() -> ledger.postTransfer(request), Status.Code.ALREADY_EXISTS, "POSTING_ID_CONFLICT");
+        }
         assertThat(balanceOf(payer)).isEqualByComparingTo("60.00");
+        assertThat(balanceOf(payee)).isEqualByComparingTo("40.00");
+        assertThat(balanceOf(otherPayee)).isEqualByComparingTo("0.00");
+        assertThat(entriesOf(postingId)).isEqualTo(2);
+    }
+
+    /**
+     * The claim is the first write of a posting and the business check comes after it. If they were in different
+     * transactions, a rejected request would leave its id claimed and a later valid request with that id would be
+     * reported as already posted without any money moving.
+     */
+    @Test
+    void rejectedPosting_rollsBackItsClaimWithTheRestOfTheTransaction() {
+        UUID postingId = UUID.randomUUID();
+        assertRejected(() -> ledger.postTransfer(transfer(postingId, "100.01")),
+                Status.Code.FAILED_PRECONDITION, "INSUFFICIENT_FUNDS");
+
+        PostTransferResponse retry = ledger.postTransfer(transfer(postingId, "100.00"));
+
+        assertThat(retry.getAlreadyPosted()).isFalse();
+        assertThat(balanceOf(payer)).isEqualByComparingTo("0.00");
+        assertThat(entriesOf(postingId)).isEqualTo(2);
     }
 
     @Test

@@ -14,6 +14,7 @@ import io.github.egeozdemirr.corebank.account.domain.exception.InvalidAmountExce
 import io.github.egeozdemirr.corebank.account.domain.exception.PostingConflictException;
 import io.github.egeozdemirr.corebank.account.domain.ledger.PostingId;
 import io.github.egeozdemirr.corebank.account.domain.ledger.PostingType;
+import io.github.egeozdemirr.corebank.account.domain.money.Money;
 import io.github.egeozdemirr.corebank.account.support.InMemoryAccountStore;
 import io.github.egeozdemirr.corebank.account.support.InMemoryLedger;
 import io.github.egeozdemirr.corebank.account.support.TestAccounts;
@@ -87,6 +88,15 @@ class PostTransferServiceTest {
 
         assertThatThrownBy(() -> service.post(new PostTransferCommand(postingId, payee.id(), payer.id(),
                 money("40.00")))).isInstanceOf(PostingConflictException.class);
+    }
+
+    @Test
+    void reusedIdForAnotherCurrency_isConflict() {
+        PostingId postingId = PostingId.newId();
+        service.post(command(postingId, "40.00"));
+
+        assertThatThrownBy(() -> service.post(new PostTransferCommand(postingId, payer.id(), payee.id(),
+                Money.of("40.00", TestAccounts.USD)))).isInstanceOf(PostingConflictException.class);
     }
 
     @Test
