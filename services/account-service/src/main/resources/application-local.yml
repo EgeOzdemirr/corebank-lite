@@ -1,0 +1,6 @@
+# Developer machine only: enables tools such as grpcurl to discover the internal gRPC API (ADR-0004).
+spring:
+  grpc:
+    server:
+      reflection:
+        enabled: true

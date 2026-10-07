@@ -38,6 +38,8 @@ BSD-3 licences).
   `posted_at` returned by the first call equals the one a retry reads back on every platform (the JDK clock has
   nanosecond digits on Linux). Production code takes time only from the injected `Clock`; ArchUnit enforces it.
 - **Ports:** account-service HTTP `8080`, gRPC `9090` (plaintext; internal network only), transfer-service HTTP `8081`.
+- **Reflection** (the gRPC service that lists every service and message) is off by default and on only in the `local`
+  profile, for tools such as `grpcurl`; health checking stays on.
 
 ## Error translation
 

@@ -24,6 +24,9 @@ spring:
     server:
       # Internal API for transfer-service (ADR-0004); not routed through the gateway.
       port: ${ACCOUNT_SERVICE_GRPC_PORT:9090}
+      # Reflection lists every service and message to anyone who can reach the port; only the local profile needs it.
+      reflection:
+        enabled: false
 
 server:
   port: ${ACCOUNT_SERVICE_PORT:8080}

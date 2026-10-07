@@ -11,6 +11,7 @@ import io.github.egeozdemirr.corebank.account.domain.account.Account;
 import io.github.egeozdemirr.corebank.account.domain.account.CustomerId;
 import io.github.egeozdemirr.corebank.account.domain.account.HolderName;
 import io.github.egeozdemirr.corebank.account.domain.identity.Tckn;
+import io.github.egeozdemirr.corebank.account.support.GrpcReflectionProbe;
 import io.github.egeozdemirr.corebank.account.support.PostgresContainerConfiguration;
 import io.github.egeozdemirr.corebank.account.support.SyntheticData;
 import io.github.egeozdemirr.corebank.account.support.TestAccounts;
@@ -25,6 +26,7 @@ import io.github.egeozdemirr.corebank.contracts.grpc.ledger.v1.PostTransferRespo
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.protobuf.StatusProto;
+import io.grpc.reflection.v1.ServerReflectionGrpc;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,7 +48,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 /** The internal posting API end to end: generated stub, in-process transport, service layer and PostgreSQL. */
 @SpringBootTest
 @AutoConfigureTestGrpcTransport
-@ImportGrpcClients(types = LedgerServiceGrpc.LedgerServiceBlockingStub.class)
+@ImportGrpcClients(types = {LedgerServiceGrpc.LedgerServiceBlockingStub.class,
+        ServerReflectionGrpc.ServerReflectionStub.class})
 @Import(PostgresContainerConfiguration.class)
 class LedgerGrpcServiceIT {
 
@@ -56,6 +59,9 @@ class LedgerGrpcServiceIT {
 
     @Autowired
     private LedgerServiceGrpc.LedgerServiceBlockingStub ledger;
+
+    @Autowired
+    private ServerReflectionGrpc.ServerReflectionStub reflection;
 
     @Autowired
     private OpenAccountService openAccountService;
@@ -70,6 +76,15 @@ class LedgerGrpcServiceIT {
     void openAccounts() {
         payer = open("100.00");
         payee = open("0.00");
+    }
+
+    /** Reflection would list the internal API to anyone who reaches the port; it is on only in the local profile. */
+    @Test
+    void reflection_isOffByDefault() {
+        assertThatThrownBy(() -> GrpcReflectionProbe.listServices(reflection))
+                .rootCause()
+                .isInstanceOfSatisfying(StatusRuntimeException.class, rejection ->
+                        assertThat(rejection.getStatus().getCode()).isEqualTo(Status.Code.UNIMPLEMENTED));
     }
 
     @Test

@@ -65,7 +65,9 @@ docker compose up -d              # PostgreSQL 18, Kafka 4 (KRaft) and the versi
 | account-service | `8080` (Swagger UI: <http://localhost:8080/swagger-ui.html>) | `9090` (internal, ADR-0004) |
 | transfer-service | `8081` (arrives later in week 2) | - |
 
-Ports can be changed in `.env` (`ACCOUNT_SERVICE_PORT`, `ACCOUNT_SERVICE_GRPC_PORT`).
+Ports can be changed in `.env` (`ACCOUNT_SERVICE_PORT`, `ACCOUNT_SERVICE_GRPC_PORT`). gRPC reflection is off by
+default; run with `SPRING_PROFILES_ACTIVE=local` to let tools such as `grpcurl -plaintext localhost:9090 list`
+discover the internal API.
 
 - Open an account with an opening deposit:
 
