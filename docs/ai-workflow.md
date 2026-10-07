@@ -38,3 +38,5 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   unexpected error fails the test.
 - **Checked rather than assumed:** the ADR first said `SELECT ... FOR UPDATE`; SQL logging showed Hibernate emits
   `FOR NO KEY UPDATE` on PostgreSQL, and the ADR explains why that is the better lock here.
+- **Transfer event contracts:** no gate pushback. Repeated the week 1 check of building `contracts` three times in a
+  row without `clean`; the generated `TransferRequested*` and `TransferFailed*` classes were present every time.

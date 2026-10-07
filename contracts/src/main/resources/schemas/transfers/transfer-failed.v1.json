@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/transfers/transfer-failed.v1.json",
+  "title": "TransferFailed v1",
+  "description": "Published to banking.transfers.failed.v1 when a recorded transfer reaches FAILED because account-service definitely rejected its posting. A posting whose outcome is unknown (timeout, connection error) does not fail the transfer and produces no event. Partition key: payload.sourceAccountId.",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferFailedV1",
+  "type": "object",
+  "extends": {
+    "$ref": "../common/event-envelope.v1.json"
+  },
+  "allOf": [
+    {
+      "$ref": "../common/event-envelope.v1.json"
+    },
+    {
+      "properties": {
+        "eventType": { "const": "TransferFailed" },
+        "schemaVersion": { "const": 1 }
+      }
+    }
+  ],
+  "properties": {
+    "payload": {
+      "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferFailedPayloadV1",
+      "type": "object",
+      "extends": {
+        "$ref": "../common/transfer-details.v1.json"
+      },
+      "allOf": [
+        {
+          "$ref": "../common/transfer-details.v1.json"
+        }
+      ],
+      "properties": {
+        "failureCode": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "Stable, machine-readable reason, for example INSUFFICIENT_FUNDS, ACCOUNT_NOT_ACTIVE, ACCOUNT_NOT_FOUND or CURRENCY_MISMATCH. Deliberately an open set rather than an enum, so a new reason is not a breaking change; consumers must treat unknown codes as a generic failure. There is no free-text reason, so no personal data can leak through this event."
+        },
+        "failedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["failureCode", "failedAt"],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": ["payload"],
+  "unevaluatedProperties": false
+}

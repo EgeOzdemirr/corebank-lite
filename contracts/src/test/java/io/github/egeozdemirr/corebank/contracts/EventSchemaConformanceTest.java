@@ -8,8 +8,12 @@ import io.github.egeozdemirr.corebank.contracts.events.common.MonetaryAmountV1;
 import io.github.egeozdemirr.corebank.contracts.events.common.TransferDetailsV1;
 import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferApprovedPayloadV1;
 import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferApprovedV1;
+import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferFailedPayloadV1;
+import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferFailedV1;
 import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferPostedPayloadV1;
 import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferPostedV1;
+import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferRequestedPayloadV1;
+import io.github.egeozdemirr.corebank.contracts.events.transfers.TransferRequestedV1;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -54,6 +58,62 @@ class EventSchemaConformanceTest {
         String json = jsonMapper.writeValueAsString(transferPosted());
 
         assertThat(validator.validate(EventCatalog.TRANSFER_POSTED_V1, json)).isEmpty();
+    }
+
+    @Test
+    void transferRequested_aboveThreshold_conformsToSchema() {
+        String json = jsonMapper.writeValueAsString(transferRequested(true));
+
+        assertThat(json).contains("\"approvalRequired\":true").contains("\"checkerUserId\":null");
+        assertThat(validator.validate(EventCatalog.TRANSFER_REQUESTED_V1, json)).isEmpty();
+    }
+
+    @Test
+    void transferRequested_belowThreshold_conformsToSchema() {
+        String json = jsonMapper.writeValueAsString(transferRequested(false));
+
+        assertThat(validator.validate(EventCatalog.TRANSFER_REQUESTED_V1, json)).isEmpty();
+    }
+
+    @Test
+    void transferRequested_withChecker_isRejected() {
+        TransferRequestedV1 event = transferRequested(true);
+        event.getPayload().setCheckerUserId("checker-1");
+
+        String json = jsonMapper.writeValueAsString(event);
+
+        assertThat(validator.validate(EventCatalog.TRANSFER_REQUESTED_V1, json)).isNotEmpty();
+    }
+
+    @Test
+    void transferRequested_withoutApprovalFlag_isRejected() {
+        TransferRequestedV1 event = transferRequested(true);
+        event.getPayload().setApprovalRequired(null);
+
+        String json = jsonMapper.writeValueAsString(event);
+
+        assertThat(validator.validate(EventCatalog.TRANSFER_REQUESTED_V1, json)).isNotEmpty();
+    }
+
+    @Test
+    void transferFailed_generatedDto_conformsToSchema() {
+        String json = jsonMapper.writeValueAsString(transferFailed("INSUFFICIENT_FUNDS"));
+
+        assertThat(validator.validate(EventCatalog.TRANSFER_FAILED_V1, json)).isEmpty();
+    }
+
+    @Test
+    void transferFailed_withFreeTextInsteadOfCode_isRejected() {
+        String json = jsonMapper.writeValueAsString(transferFailed("Insufficient funds on TR80 9999 9000"));
+
+        assertThat(validator.validate(EventCatalog.TRANSFER_FAILED_V1, json)).isNotEmpty();
+    }
+
+    @Test
+    void transferFailed_withoutFailureCode_isRejected() {
+        String json = jsonMapper.writeValueAsString(transferFailed(null));
+
+        assertThat(validator.validate(EventCatalog.TRANSFER_FAILED_V1, json)).isNotEmpty();
     }
 
     @Test
@@ -132,18 +192,10 @@ class EventSchemaConformanceTest {
     }
 
     private static TransferApprovedPayloadV1 approvedPayload() {
-        return new TransferApprovedPayloadV1()
-                .withApprovedAt(NOW)
-                .withTransferId(UUID.randomUUID())
-                .withSourceAccountId(UUID.randomUUID())
-                .withSourceIban(SOURCE_IBAN)
-                .withTargetAccountId(UUID.randomUUID())
-                .withTargetIban(TARGET_IBAN)
-                .withBeneficiaryName("Mehmet Demir")
-                .withAmount(new MonetaryAmountV1().withAmount("250000.00").withCurrency("TRY"))
-                .withChannel(TransferDetailsV1.Channel.INTERNET_BANKING)
-                .withMakerUserId("maker-1")
-                .withCheckerUserId("checker-1");
+        TransferApprovedPayloadV1 payload = withTransferDetails(new TransferApprovedPayloadV1().withApprovedAt(NOW),
+                "250000.00", TransferDetailsV1.Channel.INTERNET_BANKING);
+        payload.setCheckerUserId("checker-1");
+        return payload;
     }
 
     private static TransferPostedV1 transferPosted() {
@@ -158,18 +210,51 @@ class EventSchemaConformanceTest {
     }
 
     private static TransferPostedPayloadV1 postedPayload() {
-        return new TransferPostedPayloadV1()
-                .withPostingId(UUID.randomUUID())
-                .withPostedAt(NOW)
-                .withTransferId(UUID.randomUUID())
-                .withSourceAccountId(UUID.randomUUID())
-                .withSourceIban(SOURCE_IBAN)
-                .withTargetAccountId(UUID.randomUUID())
-                .withTargetIban(TARGET_IBAN)
-                .withBeneficiaryName("Mehmet Demir")
-                .withAmount(new MonetaryAmountV1().withAmount("1500.00").withCurrency("TRY"))
-                .withChannel(TransferDetailsV1.Channel.MOBILE)
-                .withMakerUserId("maker-1")
-                .withCheckerUserId(null);
+        return withTransferDetails(new TransferPostedPayloadV1().withPostingId(UUID.randomUUID()).withPostedAt(NOW),
+                "1500.00", TransferDetailsV1.Channel.MOBILE);
+    }
+
+    private static TransferRequestedV1 transferRequested(boolean approvalRequired) {
+        return new TransferRequestedV1()
+                .withEventId(UUID.randomUUID())
+                .withEventType(EventCatalog.TRANSFER_REQUESTED_V1.eventType())
+                .withSchemaVersion(EventCatalog.TRANSFER_REQUESTED_V1.schemaVersion())
+                .withOccurredAt(NOW)
+                .withCorrelationId("correlation-4")
+                .withActorUserId("maker-1")
+                .withPayload(withTransferDetails(new TransferRequestedPayloadV1()
+                                .withRequestedAt(NOW)
+                                .withApprovalRequired(approvalRequired),
+                        "75000.00", TransferDetailsV1.Channel.BRANCH));
+    }
+
+    private static TransferFailedV1 transferFailed(String failureCode) {
+        return new TransferFailedV1()
+                .withEventId(UUID.randomUUID())
+                .withEventType(EventCatalog.TRANSFER_FAILED_V1.eventType())
+                .withSchemaVersion(EventCatalog.TRANSFER_FAILED_V1.schemaVersion())
+                .withOccurredAt(NOW)
+                .withCorrelationId("correlation-5")
+                .withActorUserId("system")
+                .withPayload(withTransferDetails(new TransferFailedPayloadV1()
+                                .withFailureCode(failureCode)
+                                .withFailedAt(NOW),
+                        "99.99", TransferDetailsV1.Channel.API));
+    }
+
+    /** Fills the fields every transfer event shares; checkerUserId stays null (below the approval threshold). */
+    private static <T extends TransferDetailsV1> T withTransferDetails(T payload, String amount,
+                                                                       TransferDetailsV1.Channel channel) {
+        payload.setTransferId(UUID.randomUUID());
+        payload.setSourceAccountId(UUID.randomUUID());
+        payload.setSourceIban(SOURCE_IBAN);
+        payload.setTargetAccountId(UUID.randomUUID());
+        payload.setTargetIban(TARGET_IBAN);
+        payload.setBeneficiaryName("Mehmet Demir");
+        payload.setAmount(new MonetaryAmountV1().withAmount(amount).withCurrency("TRY"));
+        payload.setChannel(channel);
+        payload.setMakerUserId("maker-1");
+        payload.setCheckerUserId(null);
+        return payload;
     }
 }

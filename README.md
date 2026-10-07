@@ -118,7 +118,7 @@ Current numbers (week 2, in progress):
 
 | Module | Tests | Line coverage | Branch coverage |
 | --- | --- | --- | --- |
-| contracts | 19 | 100% | n/a |
+| contracts | 32 | 100% | n/a |
 | account-service | 157 unit + 19 integration | 99.6% | 93.8% |
 
 Performance measurements (k6, p95 latency) will be added in week 6.
