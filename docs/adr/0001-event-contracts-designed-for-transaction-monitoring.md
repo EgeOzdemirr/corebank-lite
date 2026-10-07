@@ -46,3 +46,12 @@ committed `realm-export.json`, and auditable endpoints `/audit/verify` and `/ops
 - Contract changes need care: additive, optional fields are fine within a version; anything else needs a new version.
 - Generated DTOs are mutable JavaBeans (a jsonschema2pojo limitation); services map them at the edge and never use
   them as domain objects.
+
+## Amendments
+
+- **2026-10-07:** `TransferRequested` v1 (`banking.transfers.requested.v1`) and `TransferFailed` v1
+  (`banking.transfers.failed.v1`) were added under the same rules, completing the four transfer events. Both are
+  additive. `TransferRequested` pins `checkerUserId` to null and carries `approvalRequired`, so segregation-of-duties
+  checks can expect an approval with a checker for every transfer above the threshold. `TransferFailed` carries a
+  `failureCode` from an open set of upper-case codes instead of an enum or free text: a new reason is not a breaking
+  change, and no personal data can leak through a message.

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://egeozdemirr.github.io/corebank-lite/schemas/transfers/transfer-requested.v1.json",
+  "title": "TransferRequested v1",
+  "description": "Published to banking.transfers.requested.v1 when a transfer has passed validation and limits and has been recorded. Requests rejected before that (invalid input, limit exceeded, unknown account) never produce an event. Partition key: payload.sourceAccountId.",
+  "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferRequestedV1",
+  "type": "object",
+  "extends": {
+    "$ref": "../common/event-envelope.v1.json"
+  },
+  "allOf": [
+    {
+      "$ref": "../common/event-envelope.v1.json"
+    },
+    {
+      "properties": {
+        "eventType": { "const": "TransferRequested" },
+        "schemaVersion": { "const": 1 }
+      }
+    }
+  ],
+  "properties": {
+    "payload": {
+      "javaType": "io.github.egeozdemirr.corebank.contracts.events.transfers.TransferRequestedPayloadV1",
+      "type": "object",
+      "extends": {
+        "$ref": "../common/transfer-details.v1.json"
+      },
+      "allOf": [
+        {
+          "$ref": "../common/transfer-details.v1.json"
+        },
+        {
+          "properties": {
+            "checkerUserId": {
+              "type": "null",
+              "description": "Always null: nobody has approved the transfer when it is requested."
+            }
+          }
+        }
+      ],
+      "properties": {
+        "requestedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "approvalRequired": {
+          "type": "boolean",
+          "description": "True when the amount is above the approval threshold of its currency, so a checker other than the maker must approve it. Segregation-of-duties checks expect a TransferApproved with a checkerUserId for every such transfer."
+        }
+      },
+      "required": ["requestedAt", "approvalRequired"],
+      "unevaluatedProperties": false
+    }
+  },
+  "required": ["payload"],
+  "unevaluatedProperties": false
+}
