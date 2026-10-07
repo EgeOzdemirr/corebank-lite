@@ -24,19 +24,47 @@ BSD-3 licences).
 - **API:** `GetCustomerAccount`, `FindCustomerAccountByIban`, `PostTransfer`. Lookups only see customer accounts (the
   bank's own accounts are reported as `NOT_FOUND`) and return no holder name, TCKN or balance. Money travels as a
   two-decimal string with a currency code, never a float.
-- **Errors:** standard status codes with a `google.rpc.ErrorInfo` whose reason is the stable error code:
-  `INVALID_ARGUMENT`, `NOT_FOUND` and `FAILED_PRECONDITION` are definite rejections, `ALREADY_EXISTS` means a posting
-  id was reused for another movement, `ABORTED` is retryable, and `INTERNAL`, a deadline or a lost connection leave
-  the outcome unknown. `GrpcExceptionTranslator` is the single mapping, the twin of the HTTP handler.
+- **Errors:** standard status codes with a `google.rpc.ErrorInfo` (domain `account-service`, reason = stable error
+  code). `GrpcExceptionTranslator` is the single mapping, the twin of the HTTP handler; see *Error translation*.
 - **Idempotency:** a new `posting` table (one row per posting, `V5`) whose primary key is the caller's posting id.
   `LedgerPostingService` claims the id first with `INSERT ... ON CONFLICT (id) DO NOTHING`. PostgreSQL makes a second
   inserter of the same id wait until the first transaction commits (then the retry reports `already_posted` with the
   original time) or rolls back (then the retry posts). A reused id with different accounts, amount or type is
   rejected. The header is append-only and must have at least two lines at commit, like the ledger itself (ADR-0002).
+  The claim and the lines are written in one transaction (`LedgerPostingService` joins the caller's transaction with
+  `MANDATORY`); the deferred `posting_has_entries_tg` trigger refuses to commit a header without lines, so a claim can
+  never outlive a rejected posting.
 - **Time precision:** the application `Clock` ticks in microseconds, the precision PostgreSQL stores, so the
   `posted_at` returned by the first call equals the one a retry reads back on every platform (the JDK clock has
   nanosecond digits on Linux). Production code takes time only from the injected `Clock`; ArchUnit enforces it.
 - **Ports:** account-service HTTP `8080`, gRPC `9090` (plaintext; internal network only), transfer-service HTTP `8081`.
+
+## Error translation
+
+| Cause (exception) | gRPC status | `ErrorInfo.reason` | Outcome for the caller |
+| --- | --- | --- | --- |
+| Malformed request: id not a UUID, amount not a two-decimal string (`InvalidGrpcRequestException`) | `INVALID_ARGUMENT` | `INVALID_REQUEST` | Definite rejection |
+| Invalid IBAN (`InvalidIbanException`) | `INVALID_ARGUMENT` | `INVALID_IBAN` | Definite rejection |
+| Unknown currency code (`UnsupportedCurrencyException`) | `INVALID_ARGUMENT` | `UNSUPPORTED_CURRENCY` | Definite rejection |
+| Amount not positive (`InvalidAmountException`) | `INVALID_ARGUMENT` | `INVALID_AMOUNT` | Definite rejection |
+| Transfer currency differs from an account's (`CurrencyMismatchException`) | `INVALID_ARGUMENT` | `CURRENCY_MISMATCH` | Definite rejection |
+| Account missing, or not a customer account (`AccountNotFoundException`) | `NOT_FOUND` | `ACCOUNT_NOT_FOUND` | Definite rejection |
+| Not enough money (`InsufficientFundsException`) | `FAILED_PRECONDITION` | `INSUFFICIENT_FUNDS` | Definite rejection |
+| Account closed (`AccountNotActiveException`) | `FAILED_PRECONDITION` | `ACCOUNT_NOT_ACTIVE` | Definite rejection |
+| Bank's own account in a transfer (`AccountNotEligibleForPostingException`) | `FAILED_PRECONDITION` | `ACCOUNT_NOT_ELIGIBLE` | Definite rejection |
+| Debit and credit account are the same (`InvalidPostingException`) | `FAILED_PRECONDITION` | `INVALID_POSTING` | Definite rejection |
+| Posting id reused for a different movement (`PostingConflictException`) | `ALREADY_EXISTS` | `POSTING_ID_CONFLICT` | Not definite: a caller bug; never fail the transfer on it |
+| Optimistic lock conflict (`OptimisticLockingFailureException`) | `ABORTED` | `CONCURRENT_MODIFICATION` | Not definite: retry with the same posting id |
+| Any other exception on the server | `INTERNAL` | `INTERNAL_ERROR` | Unknown outcome |
+| No answer: deadline, connection lost, server down, proxy error | `DEADLINE_EXCEEDED`, `UNAVAILABLE`, `CANCELLED`, `UNKNOWN`, ... (no `ErrorInfo`) | - | Unknown outcome |
+
+**Rule for callers:** a response is a definite rejection only if its status is `INVALID_ARGUMENT`, `NOT_FOUND` or
+`FAILED_PRECONDITION` **and** it carries an `ErrorInfo` from domain `account-service`; only then may transfer-service
+move a transfer to `FAILED` and release its daily limit. Every other status, explicitly including `INTERNAL` and
+`UNKNOWN`, and any status without that `ErrorInfo` (for example one produced by the gRPC library or a proxy) means the
+posting may or may not have happened: the transfer stays `APPROVED` and is retried with the same posting id, which
+`PostTransfer` makes safe. `ErrorCategoryMappingTest` and `GrpcExceptionTranslatorTest` fail if a new error category
+has no mapping.
 
 ## Alternatives
 

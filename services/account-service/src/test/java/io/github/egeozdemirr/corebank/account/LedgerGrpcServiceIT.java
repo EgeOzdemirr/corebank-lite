@@ -157,8 +157,7 @@ class LedgerGrpcServiceIT {
                 transfer(postingId, "41.00"),
                 transfer(postingId, payer.id().toString(), otherPayee.id().toString(), "40.00"),
                 transfer(postingId, payee.id().toString(), payer.id().toString(), "40.00"),
-                transfer(postingId, "40.00").toBuilder()
-                        .setAmount(MonetaryAmount.newBuilder().setAmount("40.00").setCurrency("USD")).build());
+                withCurrency(transfer(postingId, "40.00"), "USD"));
 
         for (PostTransferRequest request : differentContent) {
             assertRejected(() -> ledger.postTransfer(request), Status.Code.ALREADY_EXISTS, "POSTING_ID_CONFLICT");
@@ -200,6 +199,20 @@ class LedgerGrpcServiceIT {
         assertThat(balanceOf(payer)).isEqualByComparingTo("100.00");
     }
 
+    /** The rows of the ADR-0004 error table that a transfer can reach today, end to end. */
+    @Test
+    void documentedRejections_carryTheirStatusAndErrorCode() {
+        assertRejected(() -> ledger.postTransfer(withCurrency(transfer(UUID.randomUUID(), "1.00"), "XYZ")),
+                Status.Code.INVALID_ARGUMENT, "UNSUPPORTED_CURRENCY");
+        assertRejected(() -> ledger.postTransfer(transfer(UUID.randomUUID(), "0.00")),
+                Status.Code.INVALID_ARGUMENT, "INVALID_AMOUNT");
+        assertRejected(() -> ledger.postTransfer(withCurrency(transfer(UUID.randomUUID(), "1.00"), "USD")),
+                Status.Code.INVALID_ARGUMENT, "CURRENCY_MISMATCH");
+        assertRejected(() -> ledger.postTransfer(transfer(UUID.randomUUID(), payer.id().toString(),
+                payer.id().toString(), "1.00")), Status.Code.FAILED_PRECONDITION, "INVALID_POSTING");
+        assertThat(balanceOf(payer)).isEqualByComparingTo("100.00");
+    }
+
     @Test
     void malformedRequests_areInvalidArguments() {
         assertRejected(() -> ledger.postTransfer(transfer(UUID.randomUUID(), "10.5")),
@@ -228,6 +241,12 @@ class LedgerGrpcServiceIT {
                 .setDebitAccountId(debit)
                 .setCreditAccountId(credit)
                 .setAmount(MonetaryAmount.newBuilder().setAmount(amount).setCurrency("TRY"))
+                .build();
+    }
+
+    private static PostTransferRequest withCurrency(PostTransferRequest request, String currency) {
+        return request.toBuilder()
+                .setAmount(request.getAmount().toBuilder().setCurrency(currency))
                 .build();
     }
 

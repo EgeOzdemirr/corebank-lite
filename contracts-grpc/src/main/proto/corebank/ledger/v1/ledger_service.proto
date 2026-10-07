@@ -10,12 +10,16 @@ option java_package = "io.github.egeozdemirr.corebank.contracts.grpc.ledger.v1";
 option java_outer_classname = "LedgerServiceProto";
 
 // Errors use the standard gRPC status codes with a google.rpc.ErrorInfo detail whose reason is the stable error code
-// of account-service (for example INSUFFICIENT_FUNDS) and whose domain is "account-service":
-//   INVALID_ARGUMENT     malformed request (bad id, IBAN, amount or currency)
-//   NOT_FOUND            the account does not exist or is not a customer account
-//   FAILED_PRECONDITION  a business rule rejected the request (insufficient funds, closed account, ...)
-//   ALREADY_EXISTS       the posting id was already used for a different posting
-//   INTERNAL             anything else; the outcome of a PostTransfer call is then unknown
+// of account-service (for example INSUFFICIENT_FUNDS) and whose domain is "account-service" (full table: ADR-0004).
+//   INVALID_ARGUMENT     malformed request (bad id, IBAN, amount or currency)          definite rejection
+//   NOT_FOUND            the account does not exist or is not a customer account       definite rejection
+//   FAILED_PRECONDITION  a business rule rejected the request (insufficient funds, ...) definite rejection
+//   ALREADY_EXISTS       the posting id was already used for a different posting       caller bug, not definite
+//   ABORTED              concurrent modification; retry with the same posting id       not definite
+//   INTERNAL             anything else                                                  outcome unknown
+// A status is a definite rejection only if it is one of the first three AND carries an ErrorInfo from
+// "account-service". Everything else, including INTERNAL, UNKNOWN, DEADLINE_EXCEEDED, UNAVAILABLE and any status
+// without that ErrorInfo, leaves the outcome of PostTransfer unknown: retry later with the same posting_id.
 service LedgerService {
   // A customer account by id. The bank's own accounts are not transfer endpoints and are reported as NOT_FOUND.
   rpc GetCustomerAccount(GetCustomerAccountRequest) returns (CustomerAccount);
