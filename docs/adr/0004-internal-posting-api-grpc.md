@@ -86,6 +86,12 @@ and a generated, versioned contract fits a call that both sides must agree on ex
 - A `PostTransfer` retry after a timeout is always safe; `LedgerGrpcServiceIT` sends 16 identical requests in parallel
   and the money moves once. A mutation test (making the claim always succeed) fails three of its tests.
 - Account lookups for transfers go through gRPC, not the public REST API.
-- The gRPC port has no TLS and no authentication yet; securing internal traffic belongs to the deployment and
-  Keycloak work (weeks 4 and 6). Spring gRPC supports TLS through SSL bundles.
 - Every posting now has a header row; existing postings were backfilled by `V5`.
+
+## Limits
+
+- **No authentication and no TLS on the internal gRPC call yet.** Port `9090` speaks plaintext and accepts any
+  caller that can reach it, so it must only be reachable inside the service network. Both are addressed in roadmap
+  week 4 together with Keycloak: transfer-service will present a service identity (client-credentials token in the
+  call metadata, checked by account-service) and the channel will use TLS through a Spring Boot SSL bundle
+  (`spring.grpc.server.ssl.bundle`, `spring.grpc.client.channel.<name>.ssl.bundle`).
