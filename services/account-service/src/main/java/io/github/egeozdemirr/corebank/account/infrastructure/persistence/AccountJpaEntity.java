@@ -22,6 +22,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Currency;
 import java.util.UUID;
 
 @Entity
@@ -50,7 +51,8 @@ class AccountJpaEntity {
     @Column(nullable = false, length = 3)
     private String currency;
 
-    @Column(nullable = false, precision = 19, scale = Money.SCALE)
+    /** Null for account types whose balance is derived from the ledger (ADR-0003). */
+    @Column(precision = 19, scale = Money.SCALE)
     private BigDecimal balance;
 
     @Enumerated(EnumType.STRING)
@@ -86,13 +88,19 @@ class AccountJpaEntity {
 
     /** Copies the only mutable parts of the aggregate. */
     void applyChangesFrom(Account account) {
-        this.balance = account.balance().amount();
+        this.balance = account.materialisedBalance().map(Money::amount).orElse(null);
         this.status = account.status();
     }
 
     Account toDomain() {
-        return Account.restore(new AccountId(id), new Iban(iban), toOwner(), openedAt, status,
-                Money.of(balance, Currencies.fromCode(currency)));
+        AccountId accountId = new AccountId(id);
+        Currency accountCurrency = Currencies.fromCode(currency);
+        if (!accountType.materialisesBalance()) {
+            return Account.restoreWithLedgerBalance(accountId, new Iban(iban), toOwner(), accountCurrency, openedAt,
+                    status);
+        }
+        return Account.restore(accountId, new Iban(iban), toOwner(), openedAt, status,
+                Money.of(balance, accountCurrency));
     }
 
     private AccountOwner toOwner() {
@@ -105,5 +113,9 @@ class AccountJpaEntity {
 
     UUID id() {
         return id;
+    }
+
+    AccountType accountType() {
+        return accountType;
     }
 }

@@ -28,3 +28,13 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   `TRUNCATE ledger_entry` (and `TRUNCATE account CASCADE`) emptied the ledger. **Caught by:** reviewing the triggers
   while writing ADR-0002; two new `LedgerIntegrityIT` tests failed against the old schema and pass with the V3
   statement-level `BEFORE TRUNCATE` trigger.
+- **Hot funding account (ADR-0003):** the red test came first and measured the week 1 design (20 of 200 parallel
+  openings succeeded, 180 got HTTP 409). **Wrong:** the first version of the fix added an `Account.materialisesBalance()`
+  shortcut on top of the new accessors and a nullable assignment in the JPA entity. **Caught by:** PMD
+  (`TooManyMethods`, `NullAssignment`); the aggregate now exposes `materialisedBalance()` as an `Optional`.
+- **Wrong:** a bulk rename of that shortcut produced a lambda parameter that shadowed a local variable in a test fake.
+  **Caught by:** the compiler on the next build. **Wrong:** the concurrency test caught `RuntimeException`.
+  **Caught by:** Checkstyle `IllegalCatch`; it now catches only data access, transaction and domain exceptions, so an
+  unexpected error fails the test.
+- **Checked rather than assumed:** the ADR first said `SELECT ... FOR UPDATE`; SQL logging showed Hibernate emits
+  `FOR NO KEY UPDATE` on PostgreSQL, and the ADR explains why that is the better lock here.

@@ -20,8 +20,11 @@ public class AccountQueryService {
         this.balanceReader = balanceReader;
     }
 
-    public Account getAccount(AccountId accountId) {
-        return accountReader.findById(accountId).orElseThrow(() -> new AccountNotFoundException(accountId));
+    /** The balance comes from {@link BalanceReader}, so funding accounts show their ledger-derived balance too. */
+    public AccountDetails getAccount(AccountId accountId) {
+        Account account = accountReader.findById(accountId)
+                .orElseThrow(() -> new AccountNotFoundException(accountId));
+        return new AccountDetails(account, getBalance(accountId).balance());
     }
 
     public AccountBalance getBalance(AccountId accountId) {

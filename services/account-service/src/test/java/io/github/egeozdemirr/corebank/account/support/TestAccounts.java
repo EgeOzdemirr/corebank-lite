@@ -46,9 +46,9 @@ public final class TestAccounts {
     }
 
     public static Account fundingAccount(Currency currency) {
-        return Account.restore(AccountId.newId(), nextIban(),
-                new InstitutionOwner(new HolderName("Funding " + currency.getCurrencyCode())), OPENED_AT,
-                AccountStatus.ACTIVE, Money.zero(currency));
+        return Account.restoreWithLedgerBalance(AccountId.newId(), nextIban(),
+                new InstitutionOwner(new HolderName("Funding " + currency.getCurrencyCode())), currency, OPENED_AT,
+                AccountStatus.ACTIVE);
     }
 
     public static Money money(String amount) {

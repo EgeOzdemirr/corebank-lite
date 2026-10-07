@@ -45,6 +45,7 @@ class AccountTest {
         account.post(entry(account, EntryDirection.DEBIT, "30.25"));
 
         assertThat(account.balance()).isEqualTo(money("119.75"));
+        assertThat(account.materialisedBalance()).contains(money("119.75"));
     }
 
     @Test
@@ -66,19 +67,52 @@ class AccountTest {
     }
 
     @Test
-    void fundingAccount_mayGoNegativeBecauseItsTypeAllowsIt() {
+    void fundingAccount_acceptsAnyDebitBecauseItsBalanceIsDerivedFromTheLedger() {
         Account funding = TestAccounts.fundingAccount(TRY);
 
-        funding.post(entry(funding, EntryDirection.DEBIT, "1000.00"));
+        funding.post(entry(funding, EntryDirection.DEBIT, "1000000.00"));
 
         assertThat(funding.type()).isEqualTo(AccountType.FUNDING);
-        assertThat(funding.balance()).isEqualTo(money("-1000.00"));
+        assertThat(funding.type().materialisesBalance()).isFalse();
+        assertThat(funding.materialisedBalance()).isEmpty();
+        assertThat(funding.currency()).isEqualTo(TRY);
+        assertThatThrownBy(funding::balance).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void accountType_decidesNegativeBalancePolicy() {
+    void openedFundingAccount_carriesNoMaterialisedBalance() {
+        Account funding = Account.open(AccountId.newId(), TestAccounts.nextIban(),
+                new InstitutionOwner(new HolderName("Funding EUR")), TRY, OPENED_AT);
+
+        assertThat(funding.type().materialisesBalance()).isFalse();
+    }
+
+    @Test
+    void accountType_decidesBalancePolicies() {
         assertThat(AccountType.CUSTOMER.allowsNegativeBalance()).isFalse();
+        assertThat(AccountType.CUSTOMER.materialisesBalance()).isTrue();
         assertThat(AccountType.FUNDING.allowsNegativeBalance()).isTrue();
+        assertThat(AccountType.FUNDING.materialisesBalance()).isFalse();
+    }
+
+    @Test
+    void restore_rejectsBalanceThatDoesNotMatchTheType() {
+        Account customer = TestAccounts.customerAccount("1.00");
+        Account funding = TestAccounts.fundingAccount(TRY);
+
+        assertThatThrownBy(() -> Account.restoreWithLedgerBalance(customer.id(), customer.iban(), customer.owner(),
+                TRY, OPENED_AT, AccountStatus.ACTIVE)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Account.restore(funding.id(), funding.iban(), funding.owner(), OPENED_AT,
+                AccountStatus.ACTIVE, money("0.00"))).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void fundingAccount_rejectsEntryInAnotherCurrency() {
+        Account funding = TestAccounts.fundingAccount(TRY);
+        LedgerEntry dollarEntry = new LedgerEntry(LedgerEntryId.newId(), PostingId.newId(), funding.id(),
+                EntryDirection.DEBIT, Money.of("1.00", USD), PostingType.OPENING_DEPOSIT, OPENED_AT);
+
+        assertThatThrownBy(() -> funding.post(dollarEntry)).isInstanceOf(CurrencyMismatchException.class);
     }
 
     @Test

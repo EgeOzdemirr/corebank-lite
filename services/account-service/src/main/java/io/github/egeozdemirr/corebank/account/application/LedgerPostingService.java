@@ -1,6 +1,6 @@
 package io.github.egeozdemirr.corebank.account.application;
 
-import io.github.egeozdemirr.corebank.account.application.port.AccountReader;
+import io.github.egeozdemirr.corebank.account.application.port.AccountLocker;
 import io.github.egeozdemirr.corebank.account.application.port.AccountWriter;
 import io.github.egeozdemirr.corebank.account.application.port.LedgerWriter;
 import io.github.egeozdemirr.corebank.account.domain.account.Account;
@@ -20,34 +20,35 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class LedgerPostingService {
 
-    private final AccountReader accountReader;
+    private final AccountLocker accountLocker;
     private final AccountWriter accountWriter;
     private final LedgerWriter ledgerWriter;
 
-    public LedgerPostingService(AccountReader accountReader, AccountWriter accountWriter, LedgerWriter ledgerWriter) {
-        this.accountReader = accountReader;
+    public LedgerPostingService(AccountLocker accountLocker, AccountWriter accountWriter, LedgerWriter ledgerWriter) {
+        this.accountLocker = accountLocker;
         this.accountWriter = accountWriter;
         this.ledgerWriter = ledgerWriter;
     }
 
     /**
-     * Accounts are loaded and updated in id order so that two postings touching the same accounts always take row
-     * locks in the same order, which rules out deadlocks between them.
+     * Accounts are locked in id order so that two postings touching the same accounts always take row locks in the
+     * same order, which rules out deadlocks between them. Only accounts with a materialised balance are written;
+     * funding accounts are validated but never locked or updated (ADR-0003).
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void post(Posting posting) {
-        List<Account> accounts = posting.accountIdsInLockOrder().stream().map(this::load).toList();
+        List<Account> accounts = posting.accountIdsInLockOrder().stream().map(this::lock).toList();
         Map<AccountId, Account> accountsById = accounts.stream()
                 .collect(Collectors.toMap(Account::id, Function.identity()));
 
         for (LedgerEntry entry : posting.entries()) {
             accountsById.get(entry.accountId()).post(entry);
         }
-        accounts.forEach(accountWriter::update);
+        accounts.stream().filter(account -> account.type().materialisesBalance()).forEach(accountWriter::update);
         ledgerWriter.append(posting);
     }
 
-    private Account load(AccountId accountId) {
-        return accountReader.findById(accountId).orElseThrow(() -> new AccountNotFoundException(accountId));
+    private Account lock(AccountId accountId) {
+        return accountLocker.lockForPosting(accountId).orElseThrow(() -> new AccountNotFoundException(accountId));
     }
 }

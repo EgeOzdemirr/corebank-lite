@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.egeozdemirr.corebank.account.domain.account.Account;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountId;
+import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotActiveException;
 import io.github.egeozdemirr.corebank.account.domain.exception.AccountNotFoundException;
 import io.github.egeozdemirr.corebank.account.domain.exception.InsufficientFundsException;
 import io.github.egeozdemirr.corebank.account.domain.ledger.Posting;
@@ -19,8 +20,8 @@ import org.junit.jupiter.api.Test;
 
 class LedgerPostingServiceTest {
 
-    private final InMemoryAccountStore accounts = new InMemoryAccountStore();
     private final InMemoryLedger ledger = new InMemoryLedger();
+    private final InMemoryAccountStore accounts = new InMemoryAccountStore(ledger);
     private final LedgerPostingService service = new LedgerPostingService(accounts, accounts, ledger);
 
     @Test
@@ -39,7 +40,7 @@ class LedgerPostingServiceTest {
     }
 
     @Test
-    void post_updatesAccountsInLockOrder() {
+    void post_locksAndUpdatesAccountsInLockOrder() {
         Account payer = TestAccounts.customerAccount("100.00");
         Account payee = TestAccounts.customerAccount("0.00");
         accounts.add(payer);
@@ -48,7 +49,38 @@ class LedgerPostingServiceTest {
 
         service.post(posting);
 
+        assertThat(accounts.lockOrder()).containsExactlyElementsOf(posting.accountIdsInLockOrder());
         assertThat(accounts.updateOrder()).containsExactlyElementsOf(posting.accountIdsInLockOrder());
+    }
+
+    @Test
+    void post_fromFundingAccount_neitherLocksNorUpdatesIt() {
+        Account funding = TestAccounts.fundingAccount(TestAccounts.TRY);
+        Account customer = TestAccounts.customerAccount("0.00");
+        accounts.add(funding);
+        accounts.add(customer);
+
+        service.post(Posting.between(PostingId.newId(), PostingType.OPENING_DEPOSIT, funding.id(), customer.id(),
+                money("250.00"), OPENED_AT));
+
+        assertThat(accounts.lockOrder()).containsExactly(customer.id());
+        assertThat(accounts.updateOrder()).containsExactly(customer.id());
+        assertThat(accounts.stored(customer.id()).balance()).isEqualTo(money("250.00"));
+        assertThat(accounts.findBalance(funding.id())).get()
+                .extracting(AccountBalance::balance).isEqualTo(money("-250.00"));
+    }
+
+    @Test
+    void post_toClosedAccount_changesNothing() {
+        Account payer = TestAccounts.customerAccount("10.00");
+        Account closed = TestAccounts.closedCustomerAccount();
+        accounts.add(payer);
+        accounts.add(closed);
+
+        assertThatThrownBy(() -> service.post(posting(payer.id(), closed.id(), "1.00")))
+                .isInstanceOf(AccountNotActiveException.class);
+        assertThat(accounts.updateOrder()).isEmpty();
+        assertThat(ledger.postings()).isEmpty();
     }
 
     @Test
@@ -75,7 +107,6 @@ class LedgerPostingServiceTest {
     }
 
     private static Posting posting(AccountId debited, AccountId credited, String amount) {
-        return Posting.between(PostingId.newId(), PostingType.OPENING_DEPOSIT, debited, credited, money(amount),
-                OPENED_AT);
+        return Posting.between(PostingId.newId(), PostingType.TRANSFER, debited, credited, money(amount), OPENED_AT);
     }
 }

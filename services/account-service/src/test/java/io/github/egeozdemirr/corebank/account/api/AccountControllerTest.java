@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 import io.github.egeozdemirr.corebank.account.application.AccountBalance;
+import io.github.egeozdemirr.corebank.account.application.AccountDetails;
 import io.github.egeozdemirr.corebank.account.application.AccountQueryService;
 import io.github.egeozdemirr.corebank.account.application.LedgerQueryService;
 import io.github.egeozdemirr.corebank.account.application.OpenAccountCommand;
@@ -124,13 +125,15 @@ class AccountControllerTest {
     @Test
     void getAccount_returnsAccount() {
         Account account = TestAccounts.fundingAccount(TRY);
-        given(accountQueryService.getAccount(account.id())).willReturn(account);
+        given(accountQueryService.getAccount(account.id()))
+                .willReturn(new AccountDetails(account, money("-320.00")));
 
         MvcTestResult result = mvc.get().uri(ACCOUNTS + "/{id}", account.id().value()).exchange();
 
         assertThat(result).hasStatus(HttpStatus.OK);
         assertThat(result).bodyJson().extractingPath("$.accountType").isEqualTo("FUNDING");
         assertThat(result).bodyJson().extractingPath("$.customerId").isNull();
+        assertThat(result).bodyJson().extractingPath("$.balance.amount").isEqualTo("-320.00");
     }
 
     @Test
@@ -226,7 +229,8 @@ class AccountControllerTest {
     @Test
     void correlationId_isEchoedWhenValidAndGeneratedOtherwise() {
         AccountId accountId = AccountId.newId();
-        given(accountQueryService.getAccount(accountId)).willReturn(TestAccounts.customerAccount("1.00"));
+        Account account = TestAccounts.customerAccount("1.00");
+        given(accountQueryService.getAccount(accountId)).willReturn(new AccountDetails(account, account.balance()));
 
         assertThat(mvc.get().uri(ACCOUNTS + "/{id}", accountId.value())
                 .header("X-Correlation-Id", "trace-123").exchange())
