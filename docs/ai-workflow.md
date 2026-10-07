@@ -54,3 +54,7 @@ For each larger feature: what the AI was given, what it got wrong, and how a tes
   regression test uses a fixed clock with nanoseconds so it fails on every platform, and a new ArchUnit rule makes the
   injected `Clock` the only source of time. **Lesson:** a test that depends on platform behaviour needs an input that
   forces the behaviour, not the platform's default.
+- **Review follow-ups on the gRPC PR:** each new test was checked for power by a temporary mutation: moving the
+  posting claim into its own transaction fails all `LedgerGrpcServiceIT` tests (the deferred trigger refuses a header
+  without lines), and enabling reflection by default fails `reflection_isOffByDefault`. The error table in ADR-0004
+  is backed by an end-to-end test for every row a transfer can reach.
