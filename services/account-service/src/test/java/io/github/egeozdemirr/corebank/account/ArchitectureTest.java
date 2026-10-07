@@ -64,7 +64,13 @@ class ArchitectureTest {
     @ArchTest
     static final ArchRule ONLY_THE_OUTBOX_KNOWS_THE_EVENT_CONTRACTS = noClasses()
             .that().resideOutsideOfPackage("..account.infrastructure.outbox..")
-            .should().dependOnClassesThat().resideInAPackage("io.github.egeozdemirr.corebank.contracts..");
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "io.github.egeozdemirr.corebank.contracts", "io.github.egeozdemirr.corebank.contracts.events..");
+
+    @ArchTest
+    static final ArchRule ONLY_THE_GRPC_ADAPTER_KNOWS_THE_GRPC_CONTRACTS = noClasses()
+            .that().resideOutsideOfPackage("..account.api.grpc..")
+            .should().dependOnClassesThat().resideInAPackage("io.github.egeozdemirr.corebank.contracts.grpc..");
 
     @ArchTest
     static final ArchRule DEPENDENCIES_ARE_CONSTRUCTOR_INJECTED = NO_CLASSES_SHOULD_USE_FIELD_INJECTION;

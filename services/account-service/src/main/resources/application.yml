@@ -20,9 +20,13 @@ spring:
           time_zone: UTC
   flyway:
     locations: classpath:db/migration
+  grpc:
+    server:
+      # Internal API for transfer-service (ADR-0004); not routed through the gateway.
+      port: ${ACCOUNT_SERVICE_GRPC_PORT:9090}
 
 server:
-  port: ${ACCOUNT_SERVICE_PORT:8081}
+  port: ${ACCOUNT_SERVICE_PORT:8080}
 
 corebank:
   account:

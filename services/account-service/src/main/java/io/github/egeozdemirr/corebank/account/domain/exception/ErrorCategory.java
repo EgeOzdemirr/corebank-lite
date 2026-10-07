@@ -7,5 +7,7 @@ package io.github.egeozdemirr.corebank.account.domain.exception;
 public enum ErrorCategory {
     INVALID_INPUT,
     NOT_FOUND,
-    RULE_VIOLATION
+    RULE_VIOLATION,
+    /** The request contradicts something already recorded under the same identity. */
+    CONFLICT
 }

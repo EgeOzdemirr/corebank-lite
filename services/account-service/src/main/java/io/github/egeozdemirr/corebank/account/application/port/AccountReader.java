@@ -2,6 +2,7 @@ package io.github.egeozdemirr.corebank.account.application.port;
 
 import io.github.egeozdemirr.corebank.account.domain.account.Account;
 import io.github.egeozdemirr.corebank.account.domain.account.AccountId;
+import io.github.egeozdemirr.corebank.account.domain.identity.Iban;
 import java.util.Currency;
 import java.util.Optional;
 
@@ -9,6 +10,8 @@ import java.util.Optional;
 public interface AccountReader {
 
     Optional<Account> findById(AccountId accountId);
+
+    Optional<Account> findByIban(Iban iban);
 
     /** The bank's funding account for a currency; a currency without one is not supported. */
     Optional<Account> findFundingAccount(Currency currency);

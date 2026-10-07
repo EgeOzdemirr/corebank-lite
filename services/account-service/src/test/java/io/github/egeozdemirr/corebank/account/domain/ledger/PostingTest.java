@@ -113,4 +113,41 @@ class PostingTest {
         return new LedgerEntry(LedgerEntryId.newId(), postingId, accountId, direction, amount,
                 PostingType.OPENING_DEPOSIT, OPENED_AT);
     }
+
+    @Test
+    void typeAndTime_comeFromTheLines() {
+        Posting posting = Posting.between(PostingId.newId(), PostingType.TRANSFER, first, second, money("3.00"),
+                OPENED_AT);
+
+        assertThat(posting.type()).isEqualTo(PostingType.TRANSFER);
+        assertThat(posting.postedAt()).isEqualTo(OPENED_AT);
+    }
+
+    @Test
+    void sameMovement_ignoresIdsAndTimeButNotAccountsDirectionAmountOrType() {
+        Posting original = Posting.between(PostingId.newId(), PostingType.TRANSFER, first, second, money("3.00"),
+                OPENED_AT);
+
+        assertThat(original.describesSameMovementAs(Posting.between(PostingId.newId(), PostingType.TRANSFER, first,
+                second, money("3.00"), OPENED_AT.plusSeconds(60)))).isTrue();
+        assertThat(original.describesSameMovementAs(Posting.between(PostingId.newId(), PostingType.TRANSFER, second,
+                first, money("3.00"), OPENED_AT))).isFalse();
+        assertThat(original.describesSameMovementAs(Posting.between(PostingId.newId(), PostingType.TRANSFER, first,
+                second, money("3.01"), OPENED_AT))).isFalse();
+        assertThat(original.describesSameMovementAs(Posting.between(PostingId.newId(), PostingType.OPENING_DEPOSIT,
+                first, second, money("3.00"), OPENED_AT))).isFalse();
+    }
+
+    @Test
+    void linesOfDifferentTypes_areRejected() {
+        PostingId id = PostingId.newId();
+        LedgerEntry debit = new LedgerEntry(LedgerEntryId.newId(), id, first, EntryDirection.DEBIT, money("1.00"),
+                PostingType.TRANSFER, OPENED_AT);
+        LedgerEntry credit = new LedgerEntry(LedgerEntryId.newId(), id, second, EntryDirection.CREDIT, money("1.00"),
+                PostingType.OPENING_DEPOSIT, OPENED_AT);
+
+        assertThatThrownBy(() -> Posting.of(id, List.of(debit, credit)))
+                .isInstanceOf(InvalidPostingException.class)
+                .hasMessageContaining("mixes posting types");
+    }
 }

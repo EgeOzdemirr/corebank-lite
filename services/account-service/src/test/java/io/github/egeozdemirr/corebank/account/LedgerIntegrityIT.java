@@ -41,6 +41,7 @@ class LedgerIntegrityIT {
         UUID postingId = UUID.randomUUID();
 
         transactionTemplate.executeWithoutResult(status -> {
+            insertHeader(postingId);
             insertEntry(postingId, TRY_FUNDING, "DEBIT", "5.00", "TRY");
             insertEntry(postingId, USD_FUNDING, "CREDIT", "5.00", "TRY");
         });
@@ -54,6 +55,7 @@ class LedgerIntegrityIT {
         UUID postingId = UUID.randomUUID();
 
         assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+            insertHeader(postingId);
             insertEntry(postingId, TRY_FUNDING, "DEBIT", "10.00", "TRY");
             insertEntry(postingId, USD_FUNDING, "CREDIT", "9.99", "TRY");
         })).isInstanceOf(DataAccessException.class).rootCause().hasMessageContaining("does not balance");
@@ -64,6 +66,7 @@ class LedgerIntegrityIT {
         UUID postingId = UUID.randomUUID();
 
         assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> {
+            insertHeader(postingId);
             insertEntry(postingId, TRY_FUNDING, "DEBIT", "10.00", "TRY");
             insertEntry(postingId, EUR_FUNDING, "CREDIT", "10.00", "EUR");
         })).isInstanceOf(DataAccessException.class).rootCause().hasMessageContaining("does not balance");
@@ -73,6 +76,7 @@ class LedgerIntegrityIT {
     void ledgerEntries_cannotBeUpdatedOrDeleted() {
         UUID postingId = UUID.randomUUID();
         transactionTemplate.executeWithoutResult(status -> {
+            insertHeader(postingId);
             insertEntry(postingId, TRY_FUNDING, "DEBIT", "1.00", "TRY");
             insertEntry(postingId, USD_FUNDING, "CREDIT", "1.00", "TRY");
         });
@@ -82,6 +86,37 @@ class LedgerIntegrityIT {
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
         assertThatThrownBy(() -> jdbcClient.sql("DELETE FROM ledger_entry WHERE posting_id = :id")
                 .param("id", postingId).update())
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
+    }
+
+    @Test
+    void entryWithoutPostingHeader_isRejected() {
+        assertThatThrownBy(() -> insertEntry(UUID.randomUUID(), TRY_FUNDING, "DEBIT", "1.00", "TRY"))
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("ledger_entry_posting_fk");
+    }
+
+    @Test
+    void postingHeaderWithoutEntries_isRejectedAtCommit() {
+        assertThatThrownBy(() -> transactionTemplate.executeWithoutResult(status -> insertHeader(UUID.randomUUID())))
+                .isInstanceOf(DataAccessException.class).rootCause()
+                .hasMessageContaining("fewer than two ledger entries");
+    }
+
+    @Test
+    void postingHeaders_cannotBeUpdatedDeletedOrTruncated() {
+        UUID postingId = UUID.randomUUID();
+        transactionTemplate.executeWithoutResult(status -> {
+            insertHeader(postingId);
+            insertEntry(postingId, TRY_FUNDING, "DEBIT", "1.00", "TRY");
+            insertEntry(postingId, USD_FUNDING, "CREDIT", "1.00", "TRY");
+        });
+
+        assertThatThrownBy(() -> jdbcClient.sql("UPDATE posting SET posted_at = now() WHERE id = :id")
+                .param("id", postingId).update())
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("posting is append-only");
+        assertThatThrownBy(() -> jdbcClient.sql("DELETE FROM posting WHERE id = :id").param("id", postingId).update())
+                .isInstanceOf(DataAccessException.class).hasMessageContaining("posting is append-only");
+        assertThatThrownBy(() -> jdbcClient.sql("TRUNCATE posting CASCADE").update())
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("append-only");
     }
 
@@ -109,6 +144,13 @@ class LedgerIntegrityIT {
                 .param("customer", UUID.randomUUID())
                 .update())
                 .isInstanceOf(DataAccessException.class).hasMessageContaining("account_owner_matches_type_ck");
+    }
+
+    private void insertHeader(UUID postingId) {
+        jdbcClient.sql("INSERT INTO posting (id, posting_type, posted_at) VALUES (:id, 'OPENING_DEPOSIT', :postedAt)")
+                .param("id", postingId)
+                .param("postedAt", Timestamp.from(Instant.now()))
+                .update();
     }
 
     private void insertEntry(UUID postingId, UUID accountId, String direction, String amount, String currency) {

@@ -52,6 +52,22 @@ class QueryServicesTest {
     }
 
     @Test
+    void customerAccount_isFoundByIdAndIbanButFundingAccountIsNot() {
+        Account customer = TestAccounts.customerAccount("5.00");
+        Account funding = TestAccounts.fundingAccount(TRY);
+        accounts.add(customer);
+        accounts.add(funding);
+
+        assertThat(accountQueries.getCustomerAccount(customer.id())).isEqualTo(customer);
+        assertThat(accountQueries.getCustomerAccount(customer.iban())).isEqualTo(customer);
+        assertThatThrownBy(() -> accountQueries.getCustomerAccount(funding.id()))
+                .isInstanceOf(AccountNotFoundException.class);
+        assertThatThrownBy(() -> accountQueries.getCustomerAccount(funding.iban()))
+                .isInstanceOf(AccountNotFoundException.class)
+                .message().doesNotContain(funding.iban().value());
+    }
+
+    @Test
     void unknownAccount_isNotFoundForEveryQuery() {
         AccountId unknown = AccountId.newId();
 

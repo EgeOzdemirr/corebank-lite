@@ -31,12 +31,18 @@ public class LedgerPostingService {
     }
 
     /**
-     * Accounts are locked in id order so that two postings touching the same accounts always take row locks in the
-     * same order, which rules out deadlocks between them. Only accounts with a materialised balance are written;
+     * The posting id is claimed first: a posting with the same id that is already recorded, or still being recorded
+     * by a concurrent transaction, is not applied a second time ({@link PostingOutcome#ALREADY_RECORDED}).
+     *
+     * <p>Accounts are locked in id order so that two postings touching the same accounts always take row locks in
+     * the same order, which rules out deadlocks between them. Only accounts with a materialised balance are written;
      * funding accounts are validated but never locked or updated (ADR-0003).
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void post(Posting posting) {
+    public PostingOutcome post(Posting posting) {
+        if (!ledgerWriter.claim(posting)) {
+            return PostingOutcome.ALREADY_RECORDED;
+        }
         List<Account> accounts = posting.accountIdsInLockOrder().stream().map(this::lock).toList();
         Map<AccountId, Account> accountsById = accounts.stream()
                 .collect(Collectors.toMap(Account::id, Function.identity()));
@@ -46,6 +52,7 @@ public class LedgerPostingService {
         }
         accounts.stream().filter(account -> account.type().materialisesBalance()).forEach(accountWriter::update);
         ledgerWriter.append(posting);
+        return PostingOutcome.POSTED;
     }
 
     private Account lock(AccountId accountId) {

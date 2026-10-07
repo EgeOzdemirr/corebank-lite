@@ -8,4 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 interface AccountJpaRepository extends JpaRepository<AccountJpaEntity, UUID> {
 
     Optional<AccountJpaEntity> findByAccountTypeAndCurrency(AccountType accountType, String currency);
+
+    Optional<AccountJpaEntity> findByIban(String iban);
 }
