@@ -18,11 +18,12 @@ designed from the first week for a transaction monitoring component that will li
 flowchart LR
     client([Client]) -->|REST| gateway[gateway<br/><i>week 4</i>]
     gateway --> account[account-service]
-    gateway --> transfer[transfer-service<br/><i>week 2</i>]
+    gateway --> transfer[transfer-service]
     gateway --> customer[customer-service]
     transfer -. gRPC .-> account
 
     account --> accountDb[(PostgreSQL<br/>account, ledger_entry,<br/>outbox_event)]
+    transfer --> transferDb[(PostgreSQL<br/>transfer, daily usage,<br/>outbox_event)]
     accountDb -. outbox relay<br/><i>week 3</i> .-> kafka{{Kafka KRaft<br/>banking.*.v1 topics}}
 
     kafka --> audit[audit-service<br/><i>week 3</i>]
@@ -41,7 +42,7 @@ flowchart LR
 | `contracts` | done | Versioned event schemas (JSON Schema) and generated DTOs, shared with `aml-monitor` |
 | `contracts-grpc` | done | Versioned `.proto` of the internal ledger API and generated gRPC stubs |
 | `services/account-service` | done | Account opening, double-entry ledger, balances, transactional outbox, internal gRPC posting API |
-| `services/transfer-service` | in progress | Transfers, state machine, limits, maker-checker, idempotency, saga (domain model done) |
+| `services/transfer-service` | in progress | Transfers, state machine, maker-checker, limits, posting via gRPC (idempotency keys and saga still to come) |
 | `services/customer-service` | skeleton | Customers, KYC status, synthetic TCKN validation |
 | `services/gateway` | skeleton | Routing, JWT validation, rate limiting |
 | `services/audit-service` | skeleton | Append-only, hash-chained audit trail |
@@ -57,15 +58,19 @@ Prerequisites: Docker, JDK 21.
 cp .env.example .env              # then change the password
 docker compose up -d              # PostgreSQL 18, Kafka 4 (KRaft) and the versioned topics
 ./mvnw -q install -DskipTests     # builds contracts and the services
-./mvnw -pl services/account-service spring-boot:run
+./mvnw -pl services/account-service spring-boot:run     # in one terminal
+./mvnw -pl services/transfer-service spring-boot:run    # in another
 ```
+
+PostgreSQL creates the transfer-service database (`TRANSFER_DB_NAME`) only on its first start. A data volume created
+before transfer-service existed lacks it: `docker compose down -v` recreates the volume, which deletes local data.
 
 | Service | HTTP | gRPC |
 | --- | --- | --- |
 | account-service | `8080` (Swagger UI: <http://localhost:8080/swagger-ui.html>) | `9090` (internal, ADR-0004) |
-| transfer-service | `8081` (arrives later in week 2) | - |
+| transfer-service | `8081` (Swagger UI: <http://localhost:8081/swagger-ui.html>) | - (client of account-service) |
 
-Ports can be changed in `.env` (`ACCOUNT_SERVICE_PORT`, `ACCOUNT_SERVICE_GRPC_PORT`). gRPC reflection is off by
+Ports can be changed in `.env` (`ACCOUNT_SERVICE_PORT`, `ACCOUNT_SERVICE_GRPC_PORT`, `TRANSFER_SERVICE_PORT`). gRPC reflection is off by
 default; run with `SPRING_PROFILES_ACTIVE=local` to let tools such as `grpcurl -plaintext localhost:9090 list`
 discover the internal API.
 
@@ -80,6 +85,24 @@ curl -s -X POST localhost:8080/api/v1/accounts \
 
 Then `GET /api/v1/accounts/{id}/balance` and `GET /api/v1/accounts/{id}/ledger-entries`.
 
+- Transfer money (the maker is the acting user; above the approval threshold a different user approves):
+
+```bash
+curl -s -X POST localhost:8081/api/v1/transfers \
+  -H 'Content-Type: application/json' -H 'X-Actor-User-Id: maker-1' \
+  -d '{"sourceAccountId":"<accountId>","targetIban":"<IBAN of another account>","beneficiaryName":"Mehmet Demir",
+       "amount":{"amount":"1500.00","currency":"TRY"},"channel":"INTERNET_BANKING"}'
+```
+
+```bash
+curl -s -X POST localhost:8081/api/v1/transfers/<transferId>/approval -H 'X-Actor-User-Id: checker-1'
+```
+
+**Read `status`, not only the HTTP code.** 201 (create) or 200 (approval) means the transfer is finished: `POSTED`, or
+`FAILED` with a `failureCode` such as `INSUFFICIENT_FUNDS`. **201 does not mean success.** 202 means it is not finished:
+`PENDING_APPROVAL` (waits for a checker) or `APPROVED` (the posting outcome is unknown; the transfer is completed later
+and its limit stays reserved). A request rejected before recording (4xx, 503) leaves nothing behind.
+
 Running the services themselves from `docker compose up` as well is planned for week 6, once each service has a
 non-root container image.
 
@@ -93,6 +116,7 @@ _A demo GIF will be added in week 6._
 - [ADR-0002: Ledger immutability is enforced in the database as well as in the application](docs/adr/0002-ledger-immutability-enforced-in-database.md)
 - [ADR-0003: Funding balances are derived from the ledger; customer accounts are row-locked in id order](docs/adr/0003-hot-account-contention.md)
 - [ADR-0004: transfer-service calls account-service over gRPC; postings are idempotent on a caller-chosen id](docs/adr/0004-internal-posting-api-grpc.md)
+- [ADR-0005: Transfer lifecycle across a remote posting](docs/adr/0005-transfer-lifecycle-across-a-remote-posting.md)
 
 Further decisions in code, each enforced by a test:
 
@@ -114,10 +138,16 @@ Further decisions in code, each enforced by a test:
 - **Transfer state machine:** CREATED -> PENDING_APPROVAL (above the approval threshold) -> APPROVED -> POSTED, with
   FAILED and REVERSED as error paths. One table in `TransferStatus` defines every allowed step; any other step throws
   `InvalidStateTransitionException`, and a test covers all 36 status pairs.
-- **Maker-checker:** the user who created a transfer above the threshold cannot approve it. Below the threshold a
-  transfer is approved automatically and has no checker (`checkerUserId` is null in events).
+- **Maker-checker:** a transfer needs a checker only if its amount is **strictly greater than** the approval
+  threshold; an amount equal to the threshold is approved automatically and has no checker (`checkerUserId` is null in
+  events). The maker can neither approve nor reject; a rejection is FAILED/`REJECTED_BY_CHECKER`. Approval must happen
+  within the Istanbul business day of the request; later the transfer expires (FAILED/`APPROVAL_EXPIRED`).
 - **Limits per currency:** approval threshold, single transaction limit and daily limit come from configuration and
-  must satisfy threshold <= single <= daily. The daily total counts per Europe/Istanbul business day.
+  must satisfy threshold <= single <= daily (checked at startup). The daily total counts per Europe/Istanbul business
+  day, is reserved atomically per source account, and is given back only when a transfer fails (ADR-0005).
+- **Posting outcomes (ADR-0005):** the transfer is recorded before account-service is called and updated after it,
+  never inside one transaction. Only a definite rejection fails a transfer; an unknown outcome (timeout, internal
+  error, 5 s budget spent) leaves it APPROVED with HTTP 202, because failing it could make the client pay twice.
 - **Layering** (`api -> application -> domain`, infrastructure behind ports) is enforced by ArchUnit.
 
 ## Tests and quality
@@ -142,14 +172,17 @@ Current numbers (week 2, in progress):
 | --- | --- | --- | --- |
 | contracts | 32 | 100% | n/a |
 | account-service | 190 unit + 34 integration | 99.6% | 93.8% |
-| transfer-service (domain) | 125 unit | 99.7% | 90.0% |
+| transfer-service | 230 unit + 48 integration | 99.8% | 92.0% |
 
 Performance measurements (k6, p95 latency) will be added in week 6.
 
 ## Known limitations
 
-- account-service is implemented; transfer-service has its domain model, its API arrives next. The other services are
-  skeletons.
+- account-service and transfer-service are implemented, transfer-service without idempotency keys yet (next step of
+  week 2). The other services are skeletons.
+- Transfers left APPROVED after an unknown posting outcome are not recovered automatically yet, and an approval
+  expires only when someone acts on it; both get a scheduled job in week 3. Transfers flagged for review
+  (`POSTING_ID_CONFLICT`) have a log line and a table row but no metric or alarm before week 5.
 - Outbox rows are not yet relayed to Kafka (week 3).
 - No authentication yet: the acting user comes from the `X-Actor-User-Id` header until Keycloak and the gateway
   arrive (week 4).
