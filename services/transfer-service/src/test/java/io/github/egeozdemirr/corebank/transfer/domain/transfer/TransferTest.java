@@ -1,6 +1,7 @@
 package io.github.egeozdemirr.corebank.transfer.domain.transfer;
 
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.CHECKER;
+import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.ISTANBUL;
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.MAKER;
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.NOW;
 import static io.github.egeozdemirr.corebank.transfer.support.TestTransfers.POLICY;
@@ -32,10 +33,11 @@ class TransferTest {
     void requestUpToTheThreshold_isApprovedAutomaticallyWithoutChecker() {
         Transfer transfer = Transfer.request(TransferId.newId(), order("50000.00"), POLICY, NOW);
 
-        assertThat(transfer.status()).isEqualTo(TransferStatus.APPROVED);
-        assertThat(transfer.approvalRequired()).isFalse();
-        assertThat(transfer.checker()).isEmpty();
-        assertThat(transfer.timeline().approvedAt()).contains(NOW);
+        TransferSnapshot state = transfer.snapshot();
+        assertThat(state.status()).isEqualTo(TransferStatus.APPROVED);
+        assertThat(state.approvalRequired()).isFalse();
+        assertThat(state.checker()).isNull();
+        assertThat(state.timeline().approvedAt()).contains(NOW);
         assertThat(transfer.pullEvents()).satisfiesExactly(
                 requested -> assertThat(requested).isInstanceOfSatisfying(TransferRequested.class, event -> {
                     assertThat(event.approvalRequired()).isFalse();
@@ -53,8 +55,8 @@ class TransferTest {
         Transfer transfer = Transfer.request(TransferId.newId(), order("50000.01"), POLICY, NOW);
 
         assertThat(transfer.status()).isEqualTo(TransferStatus.PENDING_APPROVAL);
-        assertThat(transfer.approvalRequired()).isTrue();
-        assertThat(transfer.timeline().approvedAt()).isEmpty();
+        assertThat(transfer.snapshot().approvalRequired()).isTrue();
+        assertThat(transfer.snapshot().timeline().approvedAt()).isEmpty();
         assertThat(transfer.pullEvents()).singleElement().isInstanceOfSatisfying(TransferRequested.class,
                 event -> assertThat(event.approvalRequired()).isTrue());
     }
@@ -78,11 +80,11 @@ class TransferTest {
     void approvalByAnotherUser_recordsTheChecker() {
         Transfer transfer = pendingApproval();
 
-        transfer.approve(CHECKER, LATER);
+        transfer.approve(CHECKER, ISTANBUL, LATER);
 
         assertThat(transfer.status()).isEqualTo(TransferStatus.APPROVED);
-        assertThat(transfer.checker()).contains(CHECKER);
-        assertThat(transfer.timeline().approvedAt()).contains(LATER);
+        assertThat(transfer.snapshot().checker()).isEqualTo(CHECKER);
+        assertThat(transfer.snapshot().timeline().approvedAt()).contains(LATER);
         assertThat(transfer.pullEvents()).singleElement().isInstanceOfSatisfying(TransferApproved.class, event -> {
             assertThat(event.checker()).contains(CHECKER);
             assertThat(event.occurredAt()).isEqualTo(LATER);
@@ -93,9 +95,9 @@ class TransferTest {
     void approvalByTheMaker_isRejectedAndChangesNothing() {
         Transfer transfer = pendingApproval();
 
-        assertThatThrownBy(() -> transfer.approve(MAKER, LATER)).isInstanceOf(MakerCannotApproveException.class);
-        assertThat(transfer.status()).isEqualTo(TransferStatus.PENDING_APPROVAL);
-        assertThat(transfer.checker()).isEmpty();
+        assertThatThrownBy(() -> transfer.approve(MAKER, ISTANBUL, LATER))
+                .isInstanceOf(MakerCannotApproveException.class);
+        assertThat(transfer.snapshot()).isEqualTo(pendingSnapshotOf(transfer));
         assertThat(transfer.pullEvents()).isEmpty();
     }
 
@@ -103,7 +105,7 @@ class TransferTest {
     void makerCheck_comparesUsersNotInstances() {
         Transfer transfer = pendingApproval();
 
-        assertThatThrownBy(() -> transfer.approve(new UserId(MAKER.value()), LATER))
+        assertThatThrownBy(() -> transfer.approve(new UserId(MAKER.value()), ISTANBUL, LATER))
                 .isInstanceOf(MakerCannotApproveException.class);
     }
 
@@ -112,7 +114,7 @@ class TransferTest {
     void approval_isOnlyPossibleWhilePending(TransferStatus status) {
         Transfer transfer = stored(status);
 
-        assertThatThrownBy(() -> transfer.approve(CHECKER, LATER))
+        assertThatThrownBy(() -> transfer.approve(CHECKER, ISTANBUL, LATER))
                 .isInstanceOf(InvalidStateTransitionException.class)
                 .hasMessageContaining(status + " to APPROVED");
         assertThat(transfer.status()).isEqualTo(status);
@@ -122,7 +124,8 @@ class TransferTest {
     void wrongStatus_isReportedBeforeTheMakerCheck() {
         Transfer posted = stored(TransferStatus.POSTED);
 
-        assertThatThrownBy(() -> posted.approve(MAKER, LATER)).isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> posted.approve(MAKER, ISTANBUL, LATER))
+                .isInstanceOf(InvalidStateTransitionException.class);
     }
 
     @Test
@@ -132,7 +135,7 @@ class TransferTest {
         transfer.markPosted(LATER);
 
         assertThat(transfer.status()).isEqualTo(TransferStatus.POSTED);
-        assertThat(transfer.timeline().postedAt()).contains(LATER);
+        assertThat(transfer.snapshot().timeline().postedAt()).contains(LATER);
         assertThat(transfer.pullEvents()).singleElement().isInstanceOfSatisfying(TransferPosted.class, event -> {
             assertThat(event.checker()).contains(CHECKER);
             assertThat(event.occurredAt()).isEqualTo(LATER);
@@ -146,7 +149,7 @@ class TransferTest {
 
         assertThatThrownBy(() -> transfer.markPosted(LATER)).isInstanceOf(InvalidStateTransitionException.class);
         assertThat(transfer.status()).isEqualTo(status);
-        assertThat(transfer.timeline().postedAt()).isEmpty();
+        assertThat(transfer.snapshot().timeline().postedAt()).isEmpty();
     }
 
     @ParameterizedTest
@@ -157,8 +160,8 @@ class TransferTest {
         transfer.markFailed(INSUFFICIENT_FUNDS, LATER);
 
         assertThat(transfer.status()).isEqualTo(TransferStatus.FAILED);
-        assertThat(transfer.failureReason()).contains(INSUFFICIENT_FUNDS);
-        assertThat(transfer.timeline().failedAt()).contains(LATER);
+        assertThat(transfer.snapshot().failureReason()).isEqualTo(INSUFFICIENT_FUNDS);
+        assertThat(transfer.snapshot().timeline().failedAt()).contains(LATER);
         assertThat(transfer.pullEvents()).singleElement().isInstanceOfSatisfying(TransferFailed.class, event -> {
             assertThat(event.reason()).isEqualTo(INSUFFICIENT_FUNDS);
             assertThat(event.occurredAt()).isEqualTo(LATER);
@@ -172,7 +175,7 @@ class TransferTest {
 
         assertThatThrownBy(() -> transfer.markFailed(INSUFFICIENT_FUNDS, LATER))
                 .isInstanceOf(InvalidStateTransitionException.class);
-        assertThat(transfer.failureReason()).isEmpty();
+        assertThat(transfer.snapshot().failureReason()).isNull();
     }
 
     @Test
@@ -182,7 +185,7 @@ class TransferTest {
         transfer.reverse(LATER);
 
         assertThat(transfer.status()).isEqualTo(TransferStatus.REVERSED);
-        assertThat(transfer.timeline().reversedAt()).contains(LATER);
+        assertThat(transfer.snapshot().timeline().reversedAt()).contains(LATER);
         assertThat(transfer.pullEvents()).isEmpty();
     }
 
@@ -206,12 +209,13 @@ class TransferTest {
     @Test
     void snapshot_roundTripsThroughRestore() {
         Transfer original = Transfer.request(TransferId.newId(), order("75000.00"), POLICY, NOW);
-        original.approve(CHECKER, LATER);
+        original.approve(CHECKER, ISTANBUL, LATER);
 
         Transfer restored = Transfer.restore(original.snapshot());
 
         assertThat(restored.snapshot()).isEqualTo(original.snapshot());
         assertThat(restored).isEqualTo(original).hasSameHashCodeAs(original);
+        assertThat(restored.order()).isEqualTo(original.order());
         assertThat(restored.pullEvents()).isEmpty();
     }
 
@@ -239,11 +243,16 @@ class TransferTest {
         return transfer;
     }
 
-    private static Transfer stored(TransferStatus status) {
+    private static TransferSnapshot pendingSnapshotOf(Transfer transfer) {
+        return new TransferSnapshot(transfer.id(), transfer.order(), true, TransferStatus.PENDING_APPROVAL, null,
+                TransferTimeline.requestedAt(NOW), null);
+    }
+
+    static Transfer stored(TransferStatus status) {
         return stored(status, null);
     }
 
-    private static Transfer stored(TransferStatus status, UserId checker) {
+    static Transfer stored(TransferStatus status, UserId checker) {
         return Transfer.restore(new TransferSnapshot(TransferId.newId(), order("60000.00"), true, status, checker,
                 TransferTimeline.requestedAt(NOW), null));
     }

@@ -4,6 +4,7 @@ import io.github.egeozdemirr.corebank.transfer.domain.account.AccountId;
 import io.github.egeozdemirr.corebank.transfer.domain.account.AccountReference;
 import io.github.egeozdemirr.corebank.transfer.domain.identity.Iban;
 import io.github.egeozdemirr.corebank.transfer.domain.money.Money;
+import io.github.egeozdemirr.corebank.transfer.domain.policy.BusinessCalendar;
 import io.github.egeozdemirr.corebank.transfer.domain.policy.CurrencyPolicy;
 import io.github.egeozdemirr.corebank.transfer.domain.policy.TransferPolicy;
 import io.github.egeozdemirr.corebank.transfer.domain.transfer.BeneficiaryName;
@@ -11,6 +12,7 @@ import io.github.egeozdemirr.corebank.transfer.domain.transfer.TransferChannel;
 import io.github.egeozdemirr.corebank.transfer.domain.transfer.TransferOrder;
 import io.github.egeozdemirr.corebank.transfer.domain.user.UserId;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
@@ -25,6 +27,9 @@ public final class TestTransfers {
     public static final Instant NOW = Instant.parse("2026-10-07T09:30:00Z");
     public static final UserId MAKER = new UserId("maker-1");
     public static final UserId CHECKER = new UserId("checker-1");
+    public static final BusinessCalendar ISTANBUL = new BusinessCalendar(ZoneId.of("Europe/Istanbul"));
+    /** 21:00 UTC is midnight in Istanbul: the first instant of the business day after {@link #NOW}. */
+    public static final Instant NEXT_BUSINESS_DAY = Instant.parse("2026-10-07T21:00:00Z");
 
     /** TRY: approval above 50,000.00, at most 100,000.00 per transfer and 250,000.00 per day. */
     public static final TransferPolicy POLICY = new TransferPolicy(List.of(
